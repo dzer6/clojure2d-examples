@@ -192,15 +192,18 @@
 
 (def memo-twice (memo/ttl (fn [^double v] (* 2.0 v)) :ttl/threshold 5000))
 
-(defn eval-uv-by-path [quadruple-tree-path-map [^double u ^double v ^double h] ^long i]
-  (let [flag (get quadruple-tree-path-map i)]
-    [(memo-eval-param-by-path-flag flag Tu h u)
-     (memo-eval-param-by-path-flag flag Tv h v)
-     (memo-twice h)]))
+(defn eval-uv-by-path [quadruple-tree-path-map ^Vec3 uvh ^long i]
+  (let [flag (get quadruple-tree-path-map i)
+        u (.x uvh)
+        v (.y uvh)
+        h (.z uvh)]
+    (v/vec3 (memo-eval-param-by-path-flag flag Tu h u)
+            (memo-eval-param-by-path-flag flag Tv h v)
+            (memo-twice h))))
 
 (defn four-points-into-one-sphere [part-size control-points levels-number quadruple-tree-path node]
   (let [[u v _] (reduce (partial eval-uv-by-path @quadruple-tree-path)
-                        [0.0 0.0 1.0]
+                        (v/vec3 0.0 0.0 1.0)
                         (-> levels-number dec range))
         four-points (->> [[u v]
                           [(+ u part-size) v]
@@ -241,7 +244,7 @@
 
 (defrecord BezierSpatialTree [control-points levels-number]
   SpatialTreeProto
-  (build [_] ; TODO super-ugly, have to be refactored
+  (build [_]                                                ; TODO super-ugly, have to be refactored
     (let [stack (->Stack (atom '()))
           part-size (/ 1.0 (* (dec levels-number) (dec levels-number)))
           quadruple-tree-path (atom {})
@@ -300,6 +303,35 @@
      (* (.x b) (- (* (.z a) (.y c)) (* (.y a) (.z c))))
      (* (.x c) (- (* (.y a) (.z b)) (* (.z a) (.y b))))))
 
+(defn newton–raphson-iteration [control-points epsil ray t-min t-max material iteration-limit ^Vec3 uvt i]
+  (let [u (.x uvt)
+        v (.y uvt)
+        t (.z uvt)
+        patp (point-at-parameter ^Ray ray t)
+        f (-> (bezier-s control-points u v)
+              (vec/sub patp))
+        f-u (bezier-su control-points u v)
+        f-v (bezier-sv control-points u v)
+        ray-sub-dir (vec/sub (.direction ^Ray ray))
+        dn (- (determ f-u f-v ray-sub-dir))]
+    (if (or (= i (dec iteration-limit))
+            (and (-> (.x f) (m/abs) (< epsil))
+                 (-> (.y f) (m/abs) (< epsil))
+                 (-> (.z f) (m/abs) (< epsil))))
+      (if (and (<= 0 u 1)
+               (<= 0 v 1)
+               (<= t-min t t-max))
+        (-> (->HitData t
+                       patp
+                       (-> (vec/cross f-u f-v)
+                           (vec/normalize))
+                       material)
+            (reduced))
+        (reduced nil))
+      (v/vec3 (+ u (/ (determ f f-v ray-sub-dir) dn))
+              (+ v (/ (determ f-u f ray-sub-dir) dn))
+              (+ t (/ (determ f-u f-v f) dn))))))
+
 ;;;
 
 (defrecord Surface [spatial-tree-root-node threadpool control-points material epsil iteration-limit sample-size]
@@ -332,38 +364,8 @@
              (first)))
   BezierProto
   (intersect-with-ray [_ ray initial-u initial-v t-min t-max]
-    (let [bezier-s* (partial bezier-s control-points)
-          bezier-su* (partial bezier-su control-points)
-          bezier-sv* (partial bezier-sv control-points)]
-      (loop [i 1
-             U initial-u
-             V initial-v
-             T t-min]
-        (let [patp (point-at-parameter ^Ray ray T)
-              F (-> (bezier-s* U V)
-                    (vec/sub patp))
-              Fu (bezier-su* U V)
-              Fv (bezier-sv* U V)
-              ray-sub-dir (vec/sub (.direction ^Ray ray))
-              dn (- (determ Fu Fv ray-sub-dir))]
-          (if (or (= i iteration-limit)
-                  (and (-> (.x F) (m/abs) (< epsil))
-                       (-> (.y F) (m/abs) (< epsil))
-                       (-> (.z F) (m/abs) (< epsil))))
-            (when (and (<= 0 U 1)
-                       (<= 0 V 1)
-                       (<= t-min T t-max))
-              (->HitData T
-                         patp
-                         (-> (vec/cross Fu Fv)
-                             (vec/normalize))
-                         material))
-            (recur (inc i)
-                   ^double (+ U (/ (determ F Fv ray-sub-dir) dn))
-                   ^double (+ V (/ (determ Fu F ray-sub-dir) dn))
-                   ^double (+ T (/ (determ Fu Fv F) dn)))))))))
+    (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max material iteration-limit)
+            (v/vec3 initial-u initial-v t-min)
+            (range iteration-limit))))
 
 ;;;
-
-
-
