@@ -9,7 +9,9 @@
             [rt-in-weekend.camera :refer :all]
             [rt-in-weekend.material :refer :all]
             [fastmath.core :as m]
-            [fastmath.random :as r])
+            [fastmath.random :as r]
+            [com.climate.claypoole :as cp]
+            [rt-in-weekend.bezier-spline :as bezier-spline])
   (:import [fastmath.vector Vec3]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -23,10 +25,35 @@
 
 (def ^:const zero (v/vec3 0.0 0.0 0.0))
 
-(def world [(->Sphere (v/vec3 0.0 0.0 -1.0) 0.5 (->Lambertian (v/vec3 0.8 0.3 0.3)))
-            (->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 (->Lambertian (v/vec3 0.8 0.8 0.0)))
-            (->Sphere (v/vec3 1.0 0.0 -1.0) 0.5 (->Metal (v/vec3 0.8 0.6 0.2) 1.0))
-            (->Sphere (v/vec3 -1.0 0.0 -1.0) 0.5 (->Metal (v/vec3 0.8 0.8 0.8) 0.3))])
+(def control-points [(v/vec3 -1 -1 -3)
+                     (v/vec3 -1 0 -5)
+                     (v/vec3 -1 1 -5)
+                     (v/vec3 -1 2 -3)
+
+                     (v/vec3 0 -1 -3)
+                     (v/vec3 0 0 -4)
+                     (v/vec3 0 1 -9)
+                     (v/vec3 0 2 -3)
+
+                     (v/vec3 1 -1 -3)
+                     (v/vec3 1 0 -9)
+                     (v/vec3 1 1 -4)
+                     (v/vec3 1 2 -3)
+
+                     (v/vec3 2 -1 -3)
+                     (v/vec3 2 0 -5)
+                     (v/vec3 2 1 -5)
+                     (v/vec3 2 2 -3)])
+
+(defn create-world [threadpool]
+  [(->Sphere (v/vec3 0.0 0.0 -1.0) 0.25
+             (->Metal (v/vec3 0.8 0.6 0.2) 1.0))
+   (bezier-spline/->Surface (-> (bezier-spline/->BezierSpatialTree control-points 8)
+                                (bezier-spline/build))
+                            threadpool
+                            control-points
+                            (->Metal (v/vec3 0.8 0.8 0.8) 0.3)
+                            0.00001 100 5)])
 
 (defn color
   ([ray world] (color ray world 50))
@@ -46,17 +73,27 @@
 
 (def img (p/pixels nx ny))
 
-(time (dotimes [j ny]
-        (println (str "Line: " j))
-        (dotimes [i nx]
-          (let [col (reduce v/add (v/vec3 0.0 0.0 0.0)
-                            (repeatedly samples #(let [u (/ (+ (r/drand) i) nx)
-                                                       v (/ (+ (r/drand) j) ny)
-                                                       r (get-ray default-camera u v)]
-                                                   (color r world))))]
-            (p/set-color img i (- (dec ny) j) (-> (v/div col samples)
-                                                  (v/applyf #(m/sqrt %))
-                                                  (v/mult 255.0)))))))
+(defn compute []
+  (cp/with-shutdown! [bezier-threadpool (-> (Runtime/getRuntime)
+                                            (.availableProcessors)
+                                            (cp/threadpool))
+                      horizontal-pixels-threadpool (-> (Runtime/getRuntime)
+                                                       (.availableProcessors)
+                                                       (cp/threadpool))]
+    (let [world (create-world bezier-threadpool)]
+      (time (dotimes [j ny]
+              (println (str "Line: " j))
+              (cp/pdoseq horizontal-pixels-threadpool [i (range nx)]
+                (let [col (reduce v/add (v/vec3 0.0 0.0 0.0)
+                                  (repeatedly samples #(let [u (/ (+ (r/drand) i) nx)
+                                                             v (/ (+ (r/drand) j) ny)
+                                                             r (get-ray default-camera u v)]
+                                                         (color r world))))]
+                  (p/set-color! img i (- (dec ny) j) (-> (v/div col samples)
+                                                         (v/applyf #(m/sqrt %))
+                                                         (v/mult 255.0))))))))))
+
+(compute)
 
 (u/show-image img)
 

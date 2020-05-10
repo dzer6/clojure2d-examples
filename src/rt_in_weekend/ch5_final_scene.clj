@@ -6,7 +6,9 @@
             [rt-in-weekend.ray :refer :all]
             [rt-in-weekend.hitable :refer :all]
             [rt-in-weekend.sphere :refer :all]
-            [fastmath.core :as m])
+            [rt-in-weekend.bezier-spline :as bezier-spline]
+            [fastmath.core :as m]
+            [com.climate.claypoole :as cp])
   (:import [fastmath.vector Vec3]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -23,8 +25,34 @@
 (def ^:const orig (v/vec3 0.0 0.0 0.0))
 (def ^:const one (v/vec3 1.0 1.0 1.0))
 
-(def world [(->Sphere (v/vec3 0.0 0.0 -1.0) 0.5 nil)
-            (->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 nil)])
+(def control-points [(v/vec3 -1 -1 -3)
+                     (v/vec3 -1 0 -5)
+                     (v/vec3 -1 1 -5)
+                     (v/vec3 -1 2 -3)
+
+                     (v/vec3 0 -1 -3)
+                     (v/vec3 0 0 -4)
+                     (v/vec3 0 1 -9)
+                     (v/vec3 0 2 -3)
+
+                     (v/vec3 1 -1 -3)
+                     (v/vec3 1 0 -9)
+                     (v/vec3 1 1 -4)
+                     (v/vec3 1 2 -3)
+
+                     (v/vec3 2 -1 -3)
+                     (v/vec3 2 0 -5)
+                     (v/vec3 2 1 -5)
+                     (v/vec3 2 2 -3)])
+
+(defn create-world [threadpool]
+  [(->Sphere (v/vec3 0.0 0.0 -1.0) 0.25 nil)
+   (bezier-spline/->Surface (-> (bezier-spline/->BezierSpatialTree control-points 8)
+                                (bezier-spline/build))
+                            threadpool
+                            control-points
+                            nil 0.00001 100 5)
+   (->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 nil)])
 
 (defn color [^Ray ray world]
   (if-let [^HitData world-hit (hit-list world ray 0.0 Double/MAX_VALUE)]
@@ -38,12 +66,26 @@
 
 (def img (p/pixels nx ny))
 
-(time (dotimes [j ny]
-        (dotimes [i nx]
-          (let [u (/ (double i) nx)
-                v (/ (double j) ny)
-                r (->Ray orig (v/add lower-left-corner (v/add (v/mult horizontal u) (v/mult vertical v))))]
-            (p/set-color! img i (- (dec ny) j) (color r world))))))
+(defn compute []
+  (cp/with-shutdown! [bezier-threadpool (-> (Runtime/getRuntime)
+                                            (.availableProcessors)
+                                            (cp/threadpool))
+                      horizontal-pixels-threadpool (-> (Runtime/getRuntime)
+                                                       (.availableProcessors)
+                                                       (cp/threadpool))]
+    (let [world (create-world bezier-threadpool)]
+      (time (try
+              (dotimes [j ny]
+                (println (str "Line: " j))
+                (cp/pdoseq horizontal-pixels-threadpool [i (range nx)]
+                  (let [u (/ (double i) nx)
+                        v (/ (double j) ny)
+                        r (->Ray orig (v/add lower-left-corner (v/add (v/mult horizontal u) (v/mult vertical v))))]
+                    (p/set-color! img i (- (dec ny) j) (color r world)))))
+              (catch Exception e
+                (.printStackTrace e)))))))
+
+(compute)
 
 (u/show-image img)
 

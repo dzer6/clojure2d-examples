@@ -24,9 +24,8 @@
                    (> temp ^double t-min))
             (let [patp (point-at-parameter r temp)]
               (->HitData temp patp (v/div (v/sub patp center) radius) material))
-            (let [temp2 (/ (+ b- dsqrt) a)]
-              (when (and (< temp ^double t-max)
-                         (> temp ^double t-min))
-                (let [patp (point-at-parameter r temp)]
-                  (->HitData temp patp (v/div (v/sub patp center) radius) material))))))))))
+            (when (and (< temp ^double t-max)
+                       (> temp ^double t-min))
+              (let [patp (point-at-parameter r temp)]
+                (->HitData temp patp (v/div (v/sub patp center) radius) material)))))))))
 

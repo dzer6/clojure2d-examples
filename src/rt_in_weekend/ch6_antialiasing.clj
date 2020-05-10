@@ -9,7 +9,8 @@
             [rt-in-weekend.camera :refer :all]
             [fastmath.core :as m]
             [fastmath.random :as r]
-            [fastmath.protocols :as pr])
+            [fastmath.protocols :as pr]
+            [rt-in-weekend.bezier-spline :as bezier-spline])
   (:import [fastmath.vector Vec3]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -22,7 +23,31 @@
 (def v2 (v/mult (v/vec3 0.5 0.7 1.0) 255.0))
 (def one (v/vec3 1.0 1.0 1.0))
 
+(def control-points [(v/vec3 -1 0 -4)
+                     (v/vec3 -1 1 -1)
+                     (v/vec3 -1 2 -1)
+                     (v/vec3 -1 3 -4)
+
+                     (v/vec3 0 0 -2)
+                     (v/vec3 0 1 -4)
+                     (v/vec3 0 2 -4)
+                     (v/vec3 0 3 -2)
+
+                     (v/vec3 1 0 -4)
+                     (v/vec3 1 1 -2)
+                     (v/vec3 1 2 -1)
+                     (v/vec3 1 3 -4)
+
+                     (v/vec3 2 0 -2)
+                     (v/vec3 2 1 -4)
+                     (v/vec3 2 2 -4)
+                     (v/vec3 2 3 -2)])
+
 (def world [(->Sphere (v/vec3 0.0 0.0 -1.0) 0.5 nil)
+            (bezier-spline/->Surface (-> (bezier-spline/->BezierSpatialTree control-points 9)
+                                         (bezier-spline/build))
+                                     control-points
+                                     nil 0.001 4)
             (->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 nil)])
 
 (defn color [^Ray ray world]
