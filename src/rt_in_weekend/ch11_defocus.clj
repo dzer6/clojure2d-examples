@@ -53,16 +53,16 @@
     (positionable-camera lookfrom lookat (v/vec3 0 1 0) 20 (/ (double nx) ny) 2.0 (v/mag (v/sub lookfrom lookat)))))
 
 (time (dotimes [j ny]
-        (println (str "Line: " j))
+        (when (zero? (mod j 50)) (println (str "Line: " j)))
         (dotimes [i nx]
           (let [col (reduce v/add zero
                             (repeatedly samples #(let [u (/ (+ (r/drand) i) nx)
                                                        v (/ (+ (r/drand) j) ny)
                                                        r (get-ray camera u v)]
                                                    (color r world))))]
-            (p/set-color img i (- (dec ny) j) (-> (v/div col samples)
-                                                  (v/applyf #(m/sqrt %))
-                                                  (v/mult 255.0)))))))
+            (p/set-color! img i (- (dec ny) j) (-> (v/div col samples)
+                                                   (v/applyf #(m/sqrt %))
+                                                   (v/mult 255.0)))))))
 
 (u/show-image img)
 

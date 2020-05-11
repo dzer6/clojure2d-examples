@@ -9,7 +9,9 @@
             [rt-in-weekend.camera :refer :all]
             [rt-in-weekend.material :refer :all]
             [fastmath.core :as m]
-            [fastmath.random :as r])
+            [fastmath.random :as r]
+            [rt-in-weekend.bezier-spline :as bezier-spline]
+            [com.climate.claypoole :as cp])
   (:import [fastmath.vector Vec3 Vec2]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -23,11 +25,36 @@
 
 (def ^:const zero (v/vec3 0.0 0.0 0.0))
 
+(def control-points [(v/vec3 -18 0 -4.5)
+                     (v/vec3 -18 1 -4)
+                     (v/vec3 -18 2 -4)
+                     (v/vec3 -18 3 0)
+
+                     (v/vec3 -8 0 -4.5)
+                     (v/vec3 -8 1 -4)
+                     (v/vec3 -8 2 -4)
+                     (v/vec3 -8 3 0)
+
+                     (v/vec3 -2 0 -4.5)
+                     (v/vec3 -2 1 -4)
+                     (v/vec3 -2 2 -4)
+                     (v/vec3 -2 3 0)
+
+                     (v/vec3 2 0 -4.5)
+                     (v/vec3 2 1 -4)
+                     (v/vec3 2 2 -4)
+                     (v/vec3 2 3 0)])
+
 (defn random-scene []
-  (let [world [(->Sphere (v/vec3 0 -1000 0) 1000 (->Lambertian (v/vec3 0.5 0.5 0.5)))
+  (let [world [(bezier-spline/->Surface (-> (bezier-spline/->BezierSpatialTree control-points 9)
+                                            (bezier-spline/build))
+                                        control-points
+                                        (->Metal (v/vec3 0.7 0.6 0.5) 0.0)
+                                        0.001 1000 5)
+               (->Sphere (v/vec3 0 -1000 0) 1000 (->Lambertian (v/vec3 0.5 0.5 0.5)))
                (->Sphere (v/vec3 0 1 0) 1.0 (->Dielectric 1.5))
                (->Sphere (v/vec3 -4 1 0.5) 1.0 (->Lambertian (v/vec3 0.4 0.2 0.1)))
-               (->Sphere (v/vec3 4 1 -0.5) 1.0 (->Metal (v/vec3 0.7 0.6 0.5) 0.0))]]
+               #_(->Sphere (v/vec3 4 1 -0.5) 1.0 (->Metal (v/vec3 0.7 0.6 0.5) 0.0))]]
     (vec (concat world (for [^int a (range -11 11)
                              ^int b (range -11 11)
                              :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
@@ -63,27 +90,38 @@
 (def camera
   (let [lookfrom (v/vec3 13 2 4)
         lookat (v/vec3 0 0 0)]
-    (positionable-camera lookfrom lookat (v/vec3 0 1 0) 20 (/ (double nx) ny) 0.1 10.0)))
+    (positionable-camera lookfrom lookat (v/vec3 0 1 0) 20 (/ (double nx) ny) 0.1 20.0)))
 
-(def world (random-scene))
 (def r2-seq (vec (take samples (r/jittered-sequence-generator :r2 2 0.5))))
 
-(def window (show-window {:canvas (canvas nx ny)
-                          :draw-fn (fn [c _ f _] (p/set-canvas-pixels! c img))
-                          :fps 1}))
+(def window (show-window {:canvas  (canvas nx ny)
+                          :draw-fn (fn [c _ _ _] (p/set-canvas-pixels! c img))
+                          :fps     1}))
 
-(time (dotimes [j ny]
-        (println (str "Line: " j))
-        (dotimes [i nx]
-          (let [p (v/vec2 i j)
-                col (reduce v/add zero
-                            (map #(let [^Vec2 pp (v/add % p)
-                                        u (/ (.x pp) nx)
-                                        v (/ (.y pp) ny)
-                                        r (get-ray camera u v)]
-                                    (color r world)) r2-seq))]
-            (p/set-color! img i (- (dec ny) j) (-> (v/div col samples)
-                                                   (v/sqrt)
-                                                   (v/mult 255.0)))))))
+(defn compute []
+  (cp/with-shutdown! [horizontal-pixels-threadpool (-> (Runtime/getRuntime)
+                                                       (.availableProcessors)
+                                                       (cp/threadpool))]
+    (let [world (random-scene)]
+      (time (dotimes [j ny]
+              (println (str "Line: " j))
+              (cp/pdoseq horizontal-pixels-threadpool [i (range nx)]
+                (let [p (v/vec2 i j)
+                      col (reduce v/add zero
+                                  (map #(let [^Vec2 pp (v/add % p)
+                                              u (/ (.x pp) nx)
+                                              v (/ (.y pp) ny)
+                                              r (get-ray camera u v)]
+                                          (color r world)) r2-seq))]
+                  (p/set-color! img i (- (dec ny) j) (-> (v/div col samples)
+                                                         (v/sqrt)
+                                                         (v/mult 255.0))))))))))
 
-;; (save img "results/rt-in-weekend/random_scene_r2.jpg")
+(try
+  (compute)
+  (catch Exception e
+    (.printStackTrace e)))
+
+(->> (System/currentTimeMillis)
+     (format "./target/ch12-random-scenee_%s.jpg")
+     (save img))
