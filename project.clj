@@ -23,7 +23,7 @@
   :repl-options {:timeout 120000}
   :target-path "target/%s"
 
-  :jvm-opts ^:replace ["-Dserver -Dclojure.compiler.direct-linking=true"
+  :jvm-opts ^:replace ["-Dserver"
                        "-Dclojure.compiler.direct-linking=true"
                        "-Djava.library.path=$LD_LIBRARY_PATH"
                        "-Dorg.bytedeco.javacpp.openblas.load=mkl_rt"]

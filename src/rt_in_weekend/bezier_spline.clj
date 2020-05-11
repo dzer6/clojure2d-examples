@@ -5,7 +5,6 @@
             [fastmath.vector :as vec]
             [fastmath.core :as m]
             [fastmath.vector :as v]
-            [com.climate.claypoole :as cp]
             [clojure.core.memoize :as memo])
   (:import [rt_in_weekend.ray Ray]
            (fastmath.vector Vec3)
@@ -124,12 +123,6 @@
                        (atom false)
                        (atom [])))
 
-(defn create-children [{:keys [children] :as node}]
-  (->> (range 4)
-       (map new-node)
-       (swap! children into))
-  node)
-
 ;;;
 
 (defprotocol SpatialTreeProto
@@ -158,24 +151,6 @@
       (clojure.pprint/pprint {:size  (count @stack-atom)
                               :items @stack-atom}))))
 
-(defn add-children-to-stack [stack {:keys [children] :as node}]
-  (mapv (partial push* stack) @children)
-  node)
-
-(defn incr [atom-param]
-  (swap! atom-param (fn [value] (inc value))))
-
-(defn decr [atom-param]
-  (swap! atom-param (fn [value] (dec value))))
-
-(defn decr-flag [atom-param i]
-  (swap! atom-param update
-         i
-         (fn [value] (dec value))))
-
-(defn set-flag [atom-param i v]
-  (swap! atom-param assoc i v))
-
 (def Tu [0.0 0.5 0.0 0.5])
 (def Tv [0.0 0.0 0.5 0.5])
 
@@ -190,19 +165,17 @@
 
 (def memo-eval-param-by-path-flag (memo/ttl eval-param-by-path-flag :ttl/threshold 5000))
 
-(def memo-twice (memo/ttl (fn [^double v] (* 2.0 v)) :ttl/threshold 5000))
-
-(defn eval-uv-by-path [quadruple-tree-path-map ^Vec3 uvh ^long i]
-  (let [flag (get quadruple-tree-path-map i)
+(defn eval-uv-by-path [quadruple-tree-path ^Vec3 uvh ^long i]
+  (let [flag (get quadruple-tree-path i)
         u (.x uvh)
         v (.y uvh)
         h (.z uvh)]
     (v/vec3 (memo-eval-param-by-path-flag flag Tu h u)
             (memo-eval-param-by-path-flag flag Tv h v)
-            (memo-twice h))))
+            (* 2.0 h))))
 
-(defn four-points-into-one-sphere [part-size control-points levels-number quadruple-tree-path node]
-  (let [[u v _] (reduce (partial eval-uv-by-path @quadruple-tree-path)
+(defn four-points-into-one-sphere [control-points levels-number part-size path node]
+  (let [[u v _] (reduce (partial eval-uv-by-path path)
                         (v/vec3 0.0 0.0 1.0)
                         (-> levels-number dec range))
         four-points (->> [[u v]
@@ -215,8 +188,7 @@
                     (flip v/div 4))
         R (->> four-points
                (map (partial v/dist Center))
-               (sort)
-               (last))]
+               (reduce m/fast-max))]
     (set-field node :u u)
     (set-field node :v v)
     (set-field node :last-level true)
@@ -236,62 +208,34 @@
         r (->> children
                (map (comp (partial v/dist Center)
                           (get-field-fn :center)))
-               (sort)
-               (last))]
+               (reduce m/fast-max))]
     (set-field node :last-level false)
     (set-field node :center Center)
     (set-field node :radius (+ R r))))
 
+;;;
+
+(defn add-child [node child]
+  (swap! (:children node) conj child))
+
+(defn build-tree [control-points levels-number part-size level path node]
+  (if (= level (dec levels-number))
+    (four-points-into-one-sphere control-points levels-number part-size path node)
+    (do
+      (doseq [i (range 4)]
+        (let [child (new-node)]
+          (add-child node child)
+          (build-tree control-points levels-number part-size
+                      (inc level) (conj path i) child)))
+      (four-spheres-into-one-sphere node))))
+
 (defrecord BezierSpatialTree [control-points levels-number]
   SpatialTreeProto
-  (build [_]                                                ; TODO super-ugly, have to be refactored
-    (let [stack (->Stack (atom '()))
-          part-size (/ 1.0 (* (dec levels-number) (dec levels-number)))
-          quadruple-tree-path (atom {})
-          node-from-quadruple-tree-path (atom {})
-          level (atom 1)
-          root-node (new-node)]
-      ;;;
-      (dotimes [i levels-number]
-        (set-flag quadruple-tree-path i 4))
-      ;;;
-      (->> (create-children root-node)
-           (add-children-to-stack stack))
-      ;;;
-      (while (not (empty?* stack))
-
-        (when (not= @level (dec levels-number))
-          (let [node (pop* stack)
-                prev-level (dec @level)]
-            (->> (create-children node)
-                 (add-children-to-stack stack))
-            (decr-flag quadruple-tree-path prev-level)
-            (swap! node-from-quadruple-tree-path assoc prev-level node)
-            (incr level)))
-
-        (when (= @level (dec levels-number))
-          (let [prev-level (dec @level)]
-            (while (pos? (get @quadruple-tree-path prev-level))
-              (decr-flag quadruple-tree-path prev-level)
-              (->> (pop* stack)
-                   (four-points-into-one-sphere part-size control-points levels-number quadruple-tree-path)))
-            (set-flag quadruple-tree-path prev-level 4))
-
-          (decr level)
-
-          (->> (get @node-from-quadruple-tree-path (dec @level))
-               (four-spheres-into-one-sphere))
-
-          (while (and (zero? (get @quadruple-tree-path (dec @level)))
-                      (> @level 1))
-            (set-flag quadruple-tree-path (dec @level) 4)
-            (decr level)
-            (->> (get @node-from-quadruple-tree-path (dec @level))
-                 (four-spheres-into-one-sphere)))))
-
-      (four-spheres-into-one-sphere root-node)
-
-      (as-map root-node))))
+  (build [_]
+    (let [part-size (/ 1.0 (* (dec levels-number) (dec levels-number)))
+          root (new-node)]
+      (build-tree control-points levels-number part-size 0 [] root)
+      (as-map root))))
 
 ;;;
 
@@ -318,50 +262,43 @@
             (and (-> (.x f) (m/abs) (< epsil))
                  (-> (.y f) (m/abs) (< epsil))
                  (-> (.z f) (m/abs) (< epsil))))
-      (if (and (<= 0 u 1)
-               (<= 0 v 1)
-               (<= t-min t t-max))
-        (-> (->HitData t
-                       patp
-                       (-> (vec/cross f-u f-v)
-                           (vec/normalize))
-                       material)
-            (reduced))
-        (reduced nil))
+      (-> (when (and (<= 0 u 1) (<= 0 v 1) (<= t-min t t-max))
+            (->HitData t patp (-> (vec/cross f-u f-v) (vec/normalize)) material))
+          (reduced))
       (v/vec3 (+ u (/ (determ f f-v ray-sub-dir) dn))
               (+ v (/ (determ f-u f ray-sub-dir) dn))
               (+ t (/ (determ f-u f-v f) dn))))))
 
 ;;;
 
-(defrecord Surface [spatial-tree-root-node threadpool control-points material epsil iteration-limit sample-size]
+(defn min-hit [hits]
+  (reduce (fn [^HitData a ^HitData b]
+            (if (< (.t a) (.t a))
+              a
+              b))
+          hits))
+
+(defrecord Surface [spatial-tree-root-node control-points material epsil iteration-limit sample-size]
   HitableProto
   (hit [object ray t-min t-max]
     (some->> spatial-tree-root-node
-             (tree-seq (comp (partial every? true?)
-                             (juxt (comp not
-                                         :last-level)
-                                   (comp some?
-                                         (partial flip hit t-max t-min ray)
-                                         :sphere)))
+             (tree-seq (fn [{:keys [last-level sphere]}]
+                         (and (not last-level)
+                              (some?
+                                (hit sphere ray t-min t-max))))
                        :children)
              (seq)                                          ; short circuit that works with some->>
              (filter :last-level)
-             (filter (comp some?
-                           (partial flip hit t-max t-min ray)
-                           :sphere))
+             (filter (fn [{:keys [sphere]}]
+                       (some?
+                         (hit sphere ray t-min t-max))))
              (shuffle)
              (take sample-size)
-             (cp/upmap threadpool (comp (partial apply intersect-with-ray)
-                                        (juxt (constantly object)
-                                              (constantly ray)
-                                              :u
-                                              :v
-                                              (constantly t-min)
-                                              (constantly t-max))))
+             (map (fn [{:keys [u v]}]
+                    (intersect-with-ray object ray u v t-min t-max)))
              (filter some?)
-             (sort-by (fn [hit] (.t ^HitData hit)))
-             (first)))
+             (seq)
+             (min-hit)))
   BezierProto
   (intersect-with-ray [_ ray initial-u initial-v t-min t-max]
     (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max material iteration-limit)

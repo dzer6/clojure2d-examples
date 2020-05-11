@@ -45,13 +45,12 @@
                      (v/vec3 2 1 -5)
                      (v/vec3 2 2 -3)])
 
-(defn create-world [threadpool]
+(defn create-world []
   [(->Sphere (v/vec3 0.0 0.0 -1.0) 0.25 nil)
    (bezier-spline/->Surface (-> (bezier-spline/->BezierSpatialTree control-points 8)
                                 (bezier-spline/build))
-                            threadpool
                             control-points
-                            nil 0.00001 100 5)
+                            nil 0.00001 100 8)
    (->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 nil)])
 
 (defn color [^Ray ray world]
@@ -67,16 +66,13 @@
 (def img (p/pixels nx ny))
 
 (defn compute []
-  (cp/with-shutdown! [bezier-threadpool (-> (Runtime/getRuntime)
-                                            (.availableProcessors)
-                                            (cp/threadpool))
-                      horizontal-pixels-threadpool (-> (Runtime/getRuntime)
+  (cp/with-shutdown! [horizontal-pixels-threadpool (-> (Runtime/getRuntime)
                                                        (.availableProcessors)
                                                        (cp/threadpool))]
-    (let [world (create-world bezier-threadpool)]
+    (let [world (create-world)]
       (time (try
               (dotimes [j ny]
-                (println (str "Line: " j))
+                (when (zero? (mod j 50)) (println (str "Line: " j)))
                 (cp/pdoseq horizontal-pixels-threadpool [i (range nx)]
                   (let [u (/ (double i) nx)
                         v (/ (double j) ny)
@@ -85,8 +81,13 @@
               (catch Exception e
                 (.printStackTrace e)))))))
 
-(compute)
+(try
+  (compute)
+  (catch Exception e
+    (.printStackTrace e)))
 
 (u/show-image img)
 
-;; (save img "results/rt-in-weekend/scene.jpg")
+(->> (System/currentTimeMillis)
+     (format "./target/ch5-final-scene_%s.jpg")
+     (save img))
