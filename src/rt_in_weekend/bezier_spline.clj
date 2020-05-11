@@ -102,7 +102,7 @@
                               last-level
                               children]
   ConvertibleProto
-  (as-map [self]
+  (as-map [_]
     {:sphere     (sp/->Sphere @center @radius nil)
      :center     @center
      :radius     @radius
@@ -129,27 +129,6 @@
   (build [object]))
 
 ;;;
-
-(defprotocol StackProto
-  (push* [object value])
-  (pop* [object])
-  (empty?* [object]))
-
-(defrecord Stack [stack-atom]
-  StackProto
-  (push* [_ value]
-    (swap! stack-atom conj value))
-  (pop* [_]                                                 ; TODO refactor me
-    (let [value (peek @stack-atom)]
-      (swap! stack-atom pop)
-      value))
-  (empty?* [_]
-    (empty? @stack-atom))
-  Object
-  (toString [_]
-    (with-out-str
-      (clojure.pprint/pprint {:size  (count @stack-atom)
-                              :items @stack-atom}))))
 
 (def Tu [0.0 0.5 0.0 0.5])
 (def Tv [0.0 0.0 0.5 0.5])
