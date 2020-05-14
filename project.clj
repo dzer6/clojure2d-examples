@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/core.memoize "1.0.236"]
                  [com.climate/claypoole "1.1.4"]
+                 [com.rpl/specter "1.1.3"]
                  [uncomplicate/neanderthal "0.31.0"]
                  [criterium "0.4.5"]
                  [prismatic/hiphip "0.2.1"]
@@ -23,7 +24,7 @@
   :repl-options {:timeout 120000}
   :target-path "target/%s"
 
-  :jvm-opts ^:replace ["-Dserver"
+  :jvm-opts ^:replace ["-Xmx14G" "-Dserver"
                        "-Dclojure.compiler.direct-linking=true"
                        "-Djava.library.path=$LD_LIBRARY_PATH"
                        "-Dorg.bytedeco.javacpp.openblas.load=mkl_rt"]

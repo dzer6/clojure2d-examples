@@ -5,7 +5,8 @@
             [fastmath.vector :as vec]
             [fastmath.core :as m]
             [fastmath.vector :as v]
-            [clojure.core.memoize :as memo])
+            [clojure.core.memoize :as memo]
+            [com.rpl.specter :as specter])
   (:import [rt_in_weekend.ray Ray]
            (fastmath.vector Vec3)
            (rt_in_weekend.hitable HitData)))
@@ -95,6 +96,25 @@
 (defprotocol ConvertibleProto
   (as-map [object]))
 
+(def MAP-VECTOR-NODES
+  (specter/recursive-path [] p
+    (specter/cond-path (fn [item]
+                         (and (vector? item)
+                              (not (instance? Vec3 item)))) [specter/ALL p]
+                       map? (specter/continue-then-stay specter/MAP-VALS p))))
+
+(defn transform-node [field func node]
+  (specter/transform [MAP-VECTOR-NODES (specter/must field)]
+                     func
+                     node))
+
+(defn add-spheres [node]
+  (specter/transform [MAP-VECTOR-NODES]
+                     (fn [{:keys [center radius] :as value}]
+                       (->> (sp/->Sphere center radius nil)
+                            (assoc value :sphere)))
+                     node))
+
 (defrecord SphericalTreeNode [center
                               radius
                               u
@@ -103,13 +123,12 @@
                               children]
   ConvertibleProto
   (as-map [_]
-    {:sphere     (sp/->Sphere @center @radius nil)
-     :center     @center
+    {:center     @center
      :radius     @radius
      :u          @u
      :v          @v
      :last-level @last-level
-     :children   (map as-map @children)})
+     :children   (mapv as-map @children)})
   Object
   (toString [self]
     (with-out-str
@@ -208,7 +227,7 @@
                       (inc level) (conj path i) child)))
       (four-spheres-into-one-sphere node))))
 
-(defrecord BezierSpatialTree [control-points levels-number]
+(defrecord BezierSpatialTree [levels-number control-points]
   SpatialTreeProto
   (build [_]
     (let [part-size (/ 1.0 (* (dec levels-number) (dec levels-number)))
