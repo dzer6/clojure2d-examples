@@ -34,7 +34,7 @@
 (defrecord NormalizedTreesForest [threadpool tree-levels-number path]
   BuildableProto
   (build [_]
-    (->> (bpt/load path)
+    (->> (bpt/load-control-points path)
          (object-normalized-spatial-trees threadpool tree-levels-number))))
 
 ;;;

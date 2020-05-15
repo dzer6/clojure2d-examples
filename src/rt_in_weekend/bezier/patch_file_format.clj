@@ -4,7 +4,7 @@
             [fastmath.vector :as v]))
 
 ;; http://www.holmes3d.net/graphics/roffview/tools/patchoff/
-(defn load [path]
+(defn load-control-points [path]
   (->> (slurp path)
        (ut/flip string/split #"3 3\r")
        (mapv string/trim)
