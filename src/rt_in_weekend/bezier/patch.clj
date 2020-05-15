@@ -1,24 +1,20 @@
-(ns rt-in-weekend.bezier-spline
+(ns rt-in-weekend.bezier.patch
   (:require [rt-in-weekend.ray :refer :all]
             [rt-in-weekend.hitable :refer :all]
+            [rt-in-weekend.protocols :refer :all]
             [rt-in-weekend.sphere :as sp]
             [fastmath.vector :as vec]
             [fastmath.core :as m]
             [fastmath.vector :as v]
             [clojure.core.memoize :as memo]
-            [com.rpl.specter :as specter])
+            [com.rpl.specter :as specter]
+            [rt-in-weekend.util :as ut])
   (:import [rt_in_weekend.ray Ray]
-           (fastmath.vector Vec3)
-           (rt_in_weekend.hitable HitData)))
+           (fastmath.vector Vec3)))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
 (m/use-primitive-operators)
-
-;;;
-
-(defn flip [f & xs]
-  (apply f (reverse xs)))
 
 ;;;
 
@@ -93,9 +89,6 @@
   (fn [node]
     (get-field node k)))
 
-(defprotocol ConvertibleProto
-  (as-map [object]))
-
 (def MAP-VECTOR-NODES
   (specter/recursive-path [] p
     (specter/cond-path (fn [item]
@@ -144,11 +137,6 @@
 
 ;;;
 
-(defprotocol SpatialTreeProto
-  (build [object]))
-
-;;;
-
 (def Tu [0.0 0.5 0.0 0.5])
 (def Tv [0.0 0.0 0.5 0.5])
 
@@ -183,7 +171,7 @@
                          (map (partial apply (partial bezier-s control-points))))
         Center (->> four-points
                     (reduce v/add)
-                    (flip v/div 4))
+                    (ut/flip v/div 4))
         R (->> four-points
                (map (partial v/dist Center))
                (reduce m/fast-max))]
@@ -198,11 +186,11 @@
         Center (->> children
                     (map (get-field-fn :center))
                     (reduce v/add)
-                    (flip v/div 4))
+                    (ut/flip v/div 4))
         R (->> children
                (sort-by (get-field-fn :radius))
                (last)
-               (flip get-field :radius))
+               (ut/flip get-field :radius))
         r (->> children
                (map (comp (partial v/dist Center)
                           (get-field-fn :center)))
@@ -228,7 +216,7 @@
       (four-spheres-into-one-sphere node))))
 
 (defrecord BezierSpatialTree [levels-number control-points]
-  SpatialTreeProto
+  BuildableProto
   (build [_]
     (let [part-size (/ 1.0 (* (dec levels-number) (dec levels-number)))
           root (new-node)]
@@ -237,15 +225,12 @@
 
 ;;;
 
-(defprotocol BezierProto
-  (intersect-with-ray [object ray initial-u initial-v t-min t-max]))
-
 (defn determ [^Vec3 a ^Vec3 b ^Vec3 c]
   (+ (* (.x a) (- (* (.y b) (.z c)) (* (.z b) (.y c))))
      (* (.x b) (- (* (.z a) (.y c)) (* (.y a) (.z c))))
      (* (.x c) (- (* (.y a) (.z b)) (* (.z a) (.y b))))))
 
-(defn newton–raphson-iteration [control-points epsil ray t-min t-max material iteration-limit ^Vec3 uvt i]
+(defn newton–raphson-iteration [control-points epsil ray t-min t-max iteration-limit material ^Vec3 uvt i]
   (let [u (.x uvt)
         v (.y uvt)
         t (.z uvt)
@@ -269,16 +254,9 @@
 
 ;;;
 
-(defn min-hit [hits]
-  (reduce (fn [^HitData a ^HitData b]
-            (if (< (.t a) (.t a))
-              a
-              b))
-          hits))
-
-(defrecord Surface [spatial-tree-root-node control-points material epsil iteration-limit sample-size]
+(defrecord Surface [spatial-tree-root-node control-points epsil iteration-limit sample-size material]
   HitableProto
-  (hit [object ray t-min t-max]
+  (hit [_ ray t-min t-max]
     (some->> spatial-tree-root-node
              (tree-seq (fn [{:keys [last-level sphere]}]
                          (and (not last-level)
@@ -293,14 +271,11 @@
              (shuffle)
              (take sample-size)
              (map (fn [{:keys [u v]}]
-                    (intersect-with-ray object ray u v t-min t-max)))
+                    (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max iteration-limit material)
+                            (v/vec3 u v t-min)
+                            (range iteration-limit))))
              (filter some?)
              (seq)
-             (min-hit)))
-  BezierProto
-  (intersect-with-ray [_ ray initial-u initial-v t-min t-max]
-    (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max material iteration-limit)
-            (v/vec3 initial-u initial-v t-min)
-            (range iteration-limit))))
+             (min-hit))))
 
 ;;;

@@ -5,6 +5,13 @@
 (defprotocol HitableProto
   (hit [object ray t-min t-max]))
 
+(defn min-hit [hits]
+  (reduce (fn [^HitData a ^HitData b]
+            (if (< (.t a) (.t a))
+              a
+              b))
+          hits))
+
 (defn hit-list
   "Traverse all scene objects."
   [xs ray t-min t-max]
