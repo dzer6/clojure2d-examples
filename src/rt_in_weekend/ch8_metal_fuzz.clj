@@ -11,7 +11,8 @@
             [fastmath.core :as m]
             [fastmath.random :as r]
             [com.climate.claypoole :as cp]
-            [rt-in-weekend.bezier-spline :as bezier-spline])
+            [rt-in-weekend.bezier.complex-object :as bezier-complex-object]
+            [rt-in-weekend.bezier.normalized-trees-forest :as normalized-trees-forest])
   (:import [fastmath.vector Vec3]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -25,35 +26,13 @@
 
 (def ^:const zero (v/vec3 0.0 0.0 0.0))
 
-(def control-points [(v/vec3 -1 -1 -3)
-                     (v/vec3 -1 0 -5)
-                     (v/vec3 -1 1 -5)
-                     (v/vec3 -1 2 -3)
-
-                     (v/vec3 0 -1 -3)
-                     (v/vec3 0 0 -4)
-                     (v/vec3 0 1 -9)
-                     (v/vec3 0 2 -3)
-
-                     (v/vec3 1 -1 -3)
-                     (v/vec3 1 0 -9)
-                     (v/vec3 1 1 -4)
-                     (v/vec3 1 2 -3)
-
-                     (v/vec3 2 -1 -3)
-                     (v/vec3 2 0 -5)
-                     (v/vec3 2 1 -5)
-                     (v/vec3 2 2 -3)])
-
 (defn create-world [threadpool]
-  [(->Sphere (v/vec3 0.0 0.0 -1.0) 0.25
-             (->Metal (v/vec3 0.8 0.6 0.2) 1.0))
-   (bezier-spline/->Surface (-> (bezier-spline/->BezierSpatialTree control-points 8)
-                                (bezier-spline/build))
-                            threadpool
-                            control-points
-                            (->Metal (v/vec3 0.8 0.8 0.8) 0.3)
-                            0.00001 100 5)])
+  (let [utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
+                                (normalized-trees-forest/create threadpool 8))]
+    [(bezier-complex-object/create threadpool utah-teapot-forest
+                                   0.000001 10000 5
+                                   (v/vec3 0.0 0.0 -1.0) 0.5
+                                   (->Metal (v/vec3 0.8 0.6 0.2) 1.0))]))
 
 (defn color
   ([ray world] (color ray world 50))
@@ -73,17 +52,18 @@
 
 (def img (p/pixels nx ny))
 
+(def window (show-window {:canvas  (canvas nx ny)
+                          :draw-fn (fn [c _ _ _] (p/set-canvas-pixels! c img))
+                          :fps     1}))
+
 (defn compute []
-  (cp/with-shutdown! [bezier-threadpool (-> (Runtime/getRuntime)
-                                            (.availableProcessors)
-                                            (cp/threadpool))
-                      horizontal-pixels-threadpool (-> (Runtime/getRuntime)
-                                                       (.availableProcessors)
-                                                       (cp/threadpool))]
-    (let [world (create-world bezier-threadpool)]
+  (cp/with-shutdown! [threadpool (-> (Runtime/getRuntime)
+                                     (.availableProcessors)
+                                     (cp/threadpool))]
+    (let [world (create-world threadpool)]
       (time (dotimes [j ny]
               (println (str "Line: " j))
-              (cp/pdoseq horizontal-pixels-threadpool [i (range nx)]
+              (cp/pdoseq threadpool [i (range nx)]
                 (let [col (reduce v/add (v/vec3 0.0 0.0 0.0)
                                   (repeatedly samples #(let [u (/ (+ (r/drand) i) nx)
                                                              v (/ (+ (r/drand) j) ny)
@@ -93,8 +73,11 @@
                                                          (v/applyf #(m/sqrt %))
                                                          (v/mult 255.0))))))))))
 
-(compute)
+(try
+  (compute)
+  (catch Exception e
+    (.printStackTrace e)))
 
-(u/show-image img)
-
-;; (save img "results/rt-in-weekend/metal_fuzz.jpg")
+(->> (System/currentTimeMillis)
+     (format "./target/ch8-metal-fuzz_%s.jpg")
+     (save img))

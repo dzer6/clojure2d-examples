@@ -10,8 +10,9 @@
             [rt-in-weekend.material :refer :all]
             [fastmath.core :as m]
             [fastmath.random :as r]
-            [rt-in-weekend.bezier-spline :as bezier-spline]
-            [com.climate.claypoole :as cp])
+            [com.climate.claypoole :as cp]
+            [rt-in-weekend.bezier.complex-object :as bezier-complex-object]
+            [rt-in-weekend.bezier.normalized-trees-forest :as normalized-trees-forest])
   (:import [fastmath.vector Vec3]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -25,38 +26,18 @@
 
 (def ^:const zero (v/vec3 0.0 0.0 0.0))
 
-(def control-points [(v/vec3 -2 -4 -3)
-                     (v/vec3 -2 0 -5)
-                     (v/vec3 -2 1 -5)
-                     (v/vec3 -2 3 -3)
-
-                     (v/vec3 0 -1 -3)
-                     (v/vec3 0 0 -4)
-                     (v/vec3 0 1 -9)
-                     (v/vec3 0 3 -3)
-
-                     (v/vec3 1 -1 -3)
-                     (v/vec3 1 0 -9)
-                     (v/vec3 1 1 -4)
-                     (v/vec3 1 3 -3)
-
-                     (v/vec3 3 -4 -3)
-                     (v/vec3 3 0 -5)
-                     (v/vec3 3 1 -5)
-                     (v/vec3 3 3 -3)])
-
 (defn create-world [threadpool]
-  [(bezier-spline/->Surface (-> (bezier-spline/->BezierSpatialTree control-points 8)
-                                (bezier-spline/build))
-                            threadpool
-                            control-points
-                            #_(->Metal (v/vec3 0.8 0.6 0.2) 0.0) (->Dielectric 10.5)
-                            0.00001 100 5)
-   (->Sphere (v/vec3 -0.5 2.0 -3.0) 0.5 (->Lambertian (v/vec3 0.1 0.2 0.5)))
-   (->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 (->Lambertian (v/vec3 0.8 0.8 0.0)))
-   (->Sphere (v/vec3 -2.0 1.0 -1.0) 0.5 (->Metal (v/vec3 0.8 0.6 0.2) 0.0))
-   (->Sphere (v/vec3 -2.0 2.0 -1.0) 0.5 (->Dielectric 1.5))
-   (->Sphere (v/vec3 -1.0 1.0 -1.0) -0.45 (->Dielectric 1.5))])
+  (let [utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
+                                (normalized-trees-forest/create threadpool 8))]
+    [(bezier-complex-object/create threadpool utah-teapot-forest
+                                   0.000001 10000 5
+                                   (v/vec3 0.0 0.0 -1.0) 0.5
+                                   (->Lambertian (v/vec3 0.1 0.2 0.5)))
+     (->Sphere (v/vec3 -0.5 2.0 -3.0) 0.5 (->Lambertian (v/vec3 0.1 0.2 0.5)))
+     (->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 (->Lambertian (v/vec3 0.8 0.8 0.0)))
+     (->Sphere (v/vec3 -2.0 1.0 -1.0) 0.5 (->Metal (v/vec3 0.8 0.6 0.2) 0.0))
+     (->Sphere (v/vec3 -2.0 2.0 -1.0) 0.5 (->Dielectric 1.5))
+     (->Sphere (v/vec3 -1.0 1.0 -1.0) -0.45 (->Dielectric 1.5))]))
 
 (defn color
   ([ray world] (color ray world 50))
@@ -79,17 +60,18 @@
 (def camera (positionable-camera (v/vec3 -2 2 0.5) (v/vec3 -1 1.5 -1) (v/vec3 0 1 0) 80 (/ (double nx) ny)))
 #_(def camera (positionable-camera (v/vec3 -2 2 1) (v/vec3 0 0 -1) (v/vec3 0 1 0) 20 (/ (double nx) ny)))
 
+(def window (show-window {:canvas  (canvas nx ny)
+                          :draw-fn (fn [c _ _ _] (p/set-canvas-pixels! c img))
+                          :fps     1}))
+
 (defn compute []
-  (cp/with-shutdown! [bezier-threadpool (-> (Runtime/getRuntime)
-                                            (.availableProcessors)
-                                            (cp/threadpool))
-                      horizontal-pixels-threadpool (-> (Runtime/getRuntime)
-                                                       (.availableProcessors)
-                                                       (cp/threadpool))]
-    (let [world (create-world bezier-threadpool)]
+  (cp/with-shutdown! [threadpool (-> (Runtime/getRuntime)
+                                     (.availableProcessors)
+                                     (cp/threadpool))]
+    (let [world (create-world threadpool)]
       (time (dotimes [j ny]
               (println (str "Line: " j))
-              (cp/pdoseq horizontal-pixels-threadpool [i (range nx)]
+              (cp/pdoseq threadpool [i (range nx)]
                 (let [col (reduce v/add zero
                                   (repeatedly samples #(let [u (/ (+ (r/drand) i) nx)
                                                              v (/ (+ (r/drand) j) ny)
@@ -99,9 +81,12 @@
                                                          (v/sqrt)
                                                          (v/mult 255.0))))))))))
 
-(compute)
+(try
+  (compute)
+  (catch Exception e
+    (.printStackTrace e)))
 
-(u/show-image img)
-
-;; (save img "results/rt-in-weekend/camera2-fov20.jpg")
+(->> (System/currentTimeMillis)
+     (format "./target/ch10-camera2_%s.jpg")
+     (save img))
 
