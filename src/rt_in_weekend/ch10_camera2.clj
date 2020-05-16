@@ -28,7 +28,7 @@
 
 (defn create-world [threadpool]
   (let [utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
-                                (normalized-trees-forest/create threadpool 8))]
+                                (normalized-trees-forest/create threadpool 8 nil))]
     [(bezier-complex-object/create threadpool utah-teapot-forest
                                    0.000001 10000 5
                                    (v/vec3 0.0 0.0 -1.0) 0.5

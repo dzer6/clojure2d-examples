@@ -24,7 +24,9 @@
   :repl-options {:timeout 120000}
   :target-path "target/%s"
 
-  :jvm-opts ^:replace ["-Xmx14G" "-Dserver"
+  :aot [rt-in-weekend.bezier.patch]
+
+  :jvm-opts ^:replace ["-server"
                        "-Dclojure.compiler.direct-linking=true"
                        "-Djava.library.path=$LD_LIBRARY_PATH"
                        "-Dorg.bytedeco.javacpp.openblas.load=mkl_rt"]

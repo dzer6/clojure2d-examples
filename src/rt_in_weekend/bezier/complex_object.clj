@@ -4,13 +4,18 @@
             [rt-in-weekend.protocols :refer :all]
             [rt-in-weekend.bezier.patch :as bezier-spline]
             [com.climate.claypoole :as cp]
-            [fastmath.vector :as v]))
+            [fastmath.vector :as v]
+            [fastmath.core :as m]))
+
+(set! *warn-on-reflection* true)
+(set! *unchecked-math* :warn-on-boxed)
+(m/use-primitive-operators)
 
 ;;;
 
-(defn scale-radius [radius spatial-tree-root-node]
+(defn scale-radius [^double radius spatial-tree-root-node]
   (bezier-spline/transform-node :radius
-                                (fn [value] (* value radius))
+                                (fn [^double  value] (* value radius))
                                 spatial-tree-root-node))
 
 (defn scale-center [center radius spatial-tree-root-node]

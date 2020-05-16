@@ -78,12 +78,10 @@
 ;;;
 
 (defn set-field [node k v]
-  (-> (get node k)
-      (reset! v)))
+  (assoc! node k v))
 
 (defn get-field [node k]
-  (-> (get node k)
-      (deref)))
+  (get node k))
 
 (defn get-field-fn [k]
   (fn [node]
@@ -108,39 +106,25 @@
                             (assoc value :sphere)))
                      node))
 
-(defrecord SphericalTreeNode [center
-                              radius
-                              u
-                              v
-                              last-level
-                              children]
-  ConvertibleProto
-  (as-map [_]
-    {:center     @center
-     :radius     @radius
-     :u          @u
-     :v          @v
-     :last-level @last-level
-     :children   (mapv as-map @children)})
-  Object
-  (toString [self]
-    (with-out-str
-      (clojure.pprint/pprint (as-map self)))))
+(defn as-map [n]
+  (let [node (persistent! n)]
+    {:center     (:center node)
+     :radius     (:radius node)
+     :u          (:u node)
+     :v          (:v node)
+     :last-level (:last-level node)
+     :children   (some->> (:children node)
+                          (mapv as-map))}))
 
 (defn new-node [& _]
-  (->SphericalTreeNode (atom (v/vec3))
-                       (atom 0.0)
-                       (atom 0.0)
-                       (atom 0.0)
-                       (atom false)
-                       (atom [])))
+  (transient {}))
 
 ;;;
 
 (def Tu [0.0 0.5 0.0 0.5])
 (def Tv [0.0 0.0 0.5 0.5])
 
-(defn reverse-div [^double a ^double b]
+(defn reverse-div ^double [^double a ^double b]
   (/ b a))
 
 (defn eval-param-by-path-flag [^long flag coefficient-vec ^double h ^double param]
@@ -161,14 +145,13 @@
             (* 2.0 h))))
 
 (defn four-points-into-one-sphere [control-points levels-number part-size path node]
-  (let [[u v _] (reduce (partial eval-uv-by-path path)
-                        (v/vec3 0.0 0.0 1.0)
-                        (-> levels-number dec range))
-        four-points (->> [[u v]
-                          [(+ u part-size) v]
-                          [u (+ v part-size)]
-                          [(+ u part-size) (+ v part-size)]]
-                         (map (partial apply (partial bezier-s control-points))))
+  (let [[^double u ^double v _] (reduce (partial eval-uv-by-path path)
+                                        (v/vec3 0.0 0.0 1.0)
+                                        (-> ^long levels-number dec range))
+        four-points [(bezier-s control-points u v)
+                     (bezier-s control-points (+ u ^double part-size) v)
+                     (bezier-s control-points u (+ v ^double part-size))
+                     (bezier-s control-points (+ u ^double part-size) (+ v ^double part-size))]
         Center (->> four-points
                     (reduce v/add)
                     (ut/flip v/div 4))
@@ -182,7 +165,7 @@
     (set-field node :radius R)))
 
 (defn four-spheres-into-one-sphere [node]
-  (let [children (get-field node :children)
+  (let [children (:children node)
         Center (->> children
                     (map (get-field-fn :center))
                     (reduce v/add)
@@ -197,25 +180,35 @@
                (reduce m/fast-max))]
     (set-field node :last-level false)
     (set-field node :center Center)
-    (set-field node :radius (+ R r))))
+    (set-field node :radius (+ ^double R ^double r))))
 
 ;;;
 
-(defn add-child [node child]
-  (swap! (:children node) conj child))
+(defn transient-children [node]
+  (->> (transient [])
+       (set-field node :children)))
+
+(defn persistent-children [{:keys [children] :as node}]
+  (->> (persistent! children)
+       (set-field node :children)))
+
+(defn add-child [{:keys [children]} child]
+  (conj! children child))
 
 (defn build-tree [control-points levels-number part-size level path node]
-  (if (= level (dec levels-number))
+  (if (= level (dec ^long levels-number))
     (four-points-into-one-sphere control-points levels-number part-size path node)
     (do
+      (transient-children node)
       (doseq [i (range 4)]
         (let [child (new-node)]
           (add-child node child)
           (build-tree control-points levels-number part-size
-                      (inc level) (conj path i) child)))
+                      (inc ^long level) (conj path i) child)))
+      (persistent-children node)
       (four-spheres-into-one-sphere node))))
 
-(defrecord BezierSpatialTree [levels-number control-points]
+(defrecord BezierSpatialTree [^long levels-number control-points]
   BuildableProto
   (build [_]
     (let [part-size (/ 1.0 (* (dec levels-number) (dec levels-number)))
@@ -225,27 +218,46 @@
 
 ;;;
 
-(defn determ [^Vec3 a ^Vec3 b ^Vec3 c]
+(defn determ ^double [^Vec3 a ^Vec3 b ^Vec3 c]
   (+ (* (.x a) (- (* (.y b) (.z c)) (* (.z b) (.y c))))
      (* (.x b) (- (* (.z a) (.y c)) (* (.y a) (.z c))))
      (* (.x c) (- (* (.y a) (.z b)) (* (.z a) (.y b))))))
 
-(defn newton–raphson-iteration [control-points epsil ray t-min t-max iteration-limit material ^Vec3 uvt i]
+(defn within-the-margin-of-error [^Vec3 vect ^double epsil]
+  (let [x (.x vect)
+        y (.y vect)
+        z (.z vect)]
+    (and (< (m/abs x) epsil)
+         (< (m/abs y) epsil)
+         (< (m/abs z) epsil))))
+
+(defn boundary-conditions-are-met [u v t t-min t-max]
+  (and (<= 0.0 ^double u 1.0)
+       (<= 0.0 ^double v 1.0)
+       (<= ^double t-min ^double t ^double t-max)))
+
+(defn newton–raphson-iteration [control-points
+                                epsil
+                                ^Vec3 ray
+                                t-min
+                                t-max
+                                iteration-limit
+                                material
+                                ^Vec3 uvt
+                                i]
   (let [u (.x uvt)
         v (.y uvt)
         t (.z uvt)
-        patp (point-at-parameter ^Ray ray t)
-        f (-> (bezier-s control-points u v)
-              (vec/sub patp))
-        f-u (bezier-su control-points u v)
-        f-v (bezier-sv control-points u v)
-        ray-sub-dir (vec/sub (.direction ^Ray ray))
+        ^Vec3 patp (point-at-parameter ^Ray ray t)
+        ^Vec3 f (-> (bezier-s control-points u v)
+                    (vec/sub patp))
+        ^Vec3 f-u (bezier-su control-points u v)
+        ^Vec3 f-v (bezier-sv control-points u v)
+        ^Vec3 ray-sub-dir (vec/sub (.direction ^Ray ray))
         dn (- (determ f-u f-v ray-sub-dir))]
-    (if (or (= i (dec iteration-limit))
-            (and (-> (.x f) (m/abs) (< epsil))
-                 (-> (.y f) (m/abs) (< epsil))
-                 (-> (.z f) (m/abs) (< epsil))))
-      (-> (when (and (<= 0 u 1) (<= 0 v 1) (<= t-min t t-max))
+    (if (or (= i (dec ^long iteration-limit))
+            (within-the-margin-of-error f epsil))
+      (-> (when (boundary-conditions-are-met u v t t-min t-max)
             (->HitData t patp (-> (vec/cross f-u f-v) (vec/normalize)) material))
           (reduced))
       (v/vec3 (+ u (/ (determ f f-v ray-sub-dir) dn))

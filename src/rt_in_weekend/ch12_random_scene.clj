@@ -11,7 +11,8 @@
             [fastmath.random :as r]
             [rt-in-weekend.bezier.normalized-trees-forest :as normalized-trees-forest]
             [rt-in-weekend.bezier.complex-object :as bezier-complex-object]
-            [com.climate.claypoole :as cp])
+            [com.climate.claypoole :as cp]
+            [rt-in-weekend.util :as ut])
   (:import [fastmath.vector Vec3 Vec2]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -23,43 +24,59 @@
 (def ^:const v1 (v/vec3 1.0 1.0 1.0))
 (def ^:const v2 (v/vec3 0.5 0.7 1.0))
 
-(def ^:const zero (v/vec3 0.0 0.0 0.0))
+(def zero (v/vec3 0.0 0.0 0.0))
+
+(defn rand-material [^double choose-mat]
+  (cond
+    (< choose-mat 0.6) (->Lambertian (v/vec3 (m/sq (r/drand))
+                                             (m/sq (r/drand))
+                                             (m/sq (r/drand))))
+    (< choose-mat 0.9) (->Metal (v/vec3 (r/drand 0.5 1.0)
+                                        (r/drand 0.5 1.0)
+                                        (r/drand 0.5 1.0)) (r/drand))
+    :else (->Dielectric (r/drand 1 2))))
 
 (defn random-scene [threadpool]
-  (let [utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
-                                (normalized-trees-forest/create threadpool 7))
+  (let [epsil 0.0001
+        iteration-limit 100
+        sample-size 5
+        tree-levels-number 6
+        rotate-teapot (comp (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/QUARTER_PI)
+                            (partial ut/flip v/axis-rotate (v/vec3 -1 0 0) m/HALF_PI))
+        utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
+                                (normalized-trees-forest/create threadpool tree-levels-number rotate-teapot))
+        rotate-teacup (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/HALF_PI)
         teacup-forest (->> "http://www.holmes3d.net/graphics/teapot/teacup.bpt"
-                           (normalized-trees-forest/create threadpool 7))
+                           (normalized-trees-forest/create threadpool tree-levels-number rotate-teacup))
+        the-teapot (partial bezier-complex-object/create threadpool utah-teapot-forest
+                            epsil iteration-limit sample-size)
+        teacup (partial bezier-complex-object/create threadpool teacup-forest
+                        epsil iteration-limit sample-size)
         world [(->Sphere (v/vec3 0 -1000 0) 1000 (->Lambertian (v/vec3 0.5 0.5 0.5)))
 
-               (bezier-complex-object/create threadpool utah-teapot-forest
-                                             0.001 1000 5
-                                             (v/vec3 0 1 0) 1.7 (->Dielectric 1.5))
+               (the-teapot (v/vec3 0 1 0) 1.7 (->Dielectric 1.5))
 
-               (bezier-complex-object/create threadpool utah-teapot-forest
-                                             0.001 1000 5
-                                             (v/vec3 -4 1 0.5) 1.7 (->Lambertian (v/vec3 0.4 0.2 0.1)))
+               (the-teapot (v/vec3 -4 1 0.5) 1.7 (->Lambertian (v/vec3 0.4 0.2 0.1)))
 
-               (bezier-complex-object/create threadpool utah-teapot-forest
-                                             0.001 1000 5
-                                             (v/vec3 4 1 -0.5) 1.7 (->Metal (v/vec3 0.7 0.6 0.5) 0.0))]]
-    (vec (concat world
-                 (for [^int a (range -11 11 5)
-                       ^int b (range -11 11 5)
-                       :let [center (v/vec3 (+ a (r/drand 0.9)) 0.4 (+ b (r/drand 0.9)))
-                             choose-mat (r/drand)]
-                       :when (> (v/mag (v/sub center (v/vec3 4 0.4 0))) 0.9)]
-                   (let [material (cond
-                                    (< choose-mat 0.6) (->Lambertian (v/vec3 (m/sq (r/drand))
-                                                                             (m/sq (r/drand))
-                                                                             (m/sq (r/drand))))
-                                    (< choose-mat 0.9) (->Metal (v/vec3 (r/drand 0.5 1.0)
-                                                                        (r/drand 0.5 1.0)
-                                                                        (r/drand 0.5 1.0)) (r/drand))
-                                    :else (->Dielectric (r/drand 1 2)))]
-                     (bezier-complex-object/create threadpool teacup-forest
-                                                   0.001 1000 5
-                                                   center 0.4 material)))))))
+               (the-teapot (v/vec3 4 1 -0.5) 1.7 (->Metal (v/vec3 0.7 0.6 0.5) 0.0))]
+        teacups (cp/pfor threadpool [^int a (range -11 11 4)
+                                     ^int b (range -11 11 4)
+                                     :let [center (v/vec3 (+ a (r/drand 0.9)) 0.4 (+ b (r/drand 0.9)))
+                                           choose-mat (r/drand)]
+                                     :when (> (v/mag (v/sub center (v/vec3 4 0.4 0))) 0.9)]
+                         (->> (rand-material choose-mat)
+                              (teacup center 0.4)))
+        small-spheres (cp/pfor threadpool [^int a (range -11 11 3)
+                                           ^int b (range -11 11 3)
+                                           :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
+                                                 choose-mat (r/drand)]
+                                           :when (> (v/mag (v/sub center (v/vec3 4 0.2 0))) 0.9)]
+                               (->> (rand-material choose-mat)
+                                    (->Sphere center 0.2)))]
+    (->> (concat world
+                 teacups
+                 small-spheres)
+         (vec))))
 
 (defn color
   ([ray world] (color ray world 50))
@@ -73,9 +90,9 @@
            t (* 0.5 (inc (.y unit)))]
        (v/interpolate v1 v2 t)))))
 
-(def ^:const ^int nx 400)
-(def ^:const ^int ny 200)
-(def ^:const ^int samples 2)
+(def ^:const ^int nx 800)
+(def ^:const ^int ny 400)
+(def ^:const ^int samples 200)
 
 (def img (p/pixels nx ny))
 
