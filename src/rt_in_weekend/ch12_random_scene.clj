@@ -38,9 +38,9 @@
 
 (defn random-scene [threadpool]
   (let [epsil 0.0001
-        iteration-limit 100
+        iteration-limit 10000
         sample-size 5
-        tree-levels-number 6
+        tree-levels-number 7
         rotate-teapot (comp (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/QUARTER_PI)
                             (partial ut/flip v/axis-rotate (v/vec3 -1 0 0) m/HALF_PI))
         utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
@@ -59,23 +59,23 @@
                (the-teapot (v/vec3 -4 1 0.5) 1.7 (->Lambertian (v/vec3 0.4 0.2 0.1)))
 
                (the-teapot (v/vec3 4 1 -0.5) 1.7 (->Metal (v/vec3 0.7 0.6 0.5) 0.0))]
-        teacups (cp/pfor threadpool [^int a (range -11 11 4)
-                                     ^int b (range -11 11 4)
-                                     :let [center (v/vec3 (+ a (r/drand 0.9)) 0.4 (+ b (r/drand 0.9)))
-                                           choose-mat (r/drand)]
-                                     :when (> (v/mag (v/sub center (v/vec3 4 0.4 0))) 0.9)]
-                         (->> (rand-material choose-mat)
-                              (teacup center 0.4)))
-        small-spheres (cp/pfor threadpool [^int a (range -11 11 3)
-                                           ^int b (range -11 11 3)
-                                           :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
-                                                 choose-mat (r/drand)]
-                                           :when (> (v/mag (v/sub center (v/vec3 4 0.2 0))) 0.9)]
-                               (->> (rand-material choose-mat)
-                                    (->Sphere center 0.2)))]
+        teacups (for [^int a (range -11 11 2)
+                      ^int b (range -11 11 2)
+                      :let [center (v/vec3 (+ a (r/drand 0.9)) 0.4 (+ b (r/drand 0.9)))
+                            choose-mat (r/drand)]
+                      :when (> (v/mag (v/sub center (v/vec3 4 0.4 0))) 0.9)]
+                  (->> (rand-material choose-mat)
+                       (teacup center 0.4)))
+        #_small-spheres #_(cp/pfor threadpool [^int a (range -11 11 3)
+                                               ^int b (range -11 11 3)
+                                               :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
+                                                     choose-mat (r/drand)]
+                                               :when (> (v/mag (v/sub center (v/vec3 4 0.2 0))) 0.9)]
+                                   (->> (rand-material choose-mat)
+                                        (->Sphere center 0.2)))]
     (->> (concat world
                  teacups
-                 small-spheres)
+                 #_small-spheres)
          (vec))))
 
 (defn color

@@ -24,7 +24,7 @@
                                         control-points)
         tree (->> normalized-control-points
                   (bezier-spline/->BezierSpatialTree tree-levels-number)
-                  (.build))]
+                  (build))]
     [normalized-control-points tree]))
 
 (defn object-normalized-spatial-trees [control-points-vec threadpool tree-levels-number]
@@ -54,4 +54,4 @@
 (defn create [threadpool tree-levels-number transformation-fn path]
   (->> path
        (->NormalizedTreesForest threadpool tree-levels-number transformation-fn)
-       (.build)))
+       (build)))

@@ -2,7 +2,7 @@
   (:require [rt-in-weekend.ray :refer :all]
             [rt-in-weekend.hitable :refer :all]
             [rt-in-weekend.protocols :refer :all]
-            [rt-in-weekend.sphere :as sp]
+            [rt-in-weekend.sphere :refer :all]
             [fastmath.vector :as vec]
             [fastmath.core :as m]
             [fastmath.vector :as v]
@@ -102,7 +102,7 @@
 (defn add-spheres [node]
   (specter/transform [MAP-VECTOR-NODES]
                      (fn [{:keys [center radius] :as value}]
-                       (->> (sp/->Sphere center radius nil)
+                       (->> (->Sphere center radius nil)
                             (assoc value :sphere)))
                      node))
 
