@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/core.memoize "1.0.236"]
                  [com.climate/claypoole "1.1.4"]
+                 [clj-tuple "0.2.2"]
                  [com.rpl/specter "1.1.3"]
                  [uncomplicate/neanderthal "0.31.0"]
                  [criterium "0.4.5"]
@@ -24,9 +25,12 @@
   :repl-options {:timeout 120000}
   :target-path "target/%s"
 
-  :aot [rt-in-weekend.bezier.patch]
+  #_:aot #_[rt-in-weekend.bezier.patch
+        rt-in-weekend.bezier.normalized-trees-forest
+        rt-in-weekend.bezier.complex-object]
 
   :jvm-opts ^:replace ["-server"
+                       "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
                        "-Dclojure.compiler.direct-linking=true"
                        "-Djava.library.path=$LD_LIBRARY_PATH"
                        "-Dorg.bytedeco.javacpp.openblas.load=mkl_rt"]

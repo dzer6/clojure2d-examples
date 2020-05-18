@@ -7,7 +7,8 @@
             [com.climate.claypoole :as cp]
             [fastmath.vector :as v]
             [fastmath.core :as m]
-            [rt-in-weekend.util :as ut]))
+            [rt-in-weekend.util :as ut]
+            [clj-tuple :as ct]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -27,23 +28,32 @@
                                                 (v/add center)))
                                 spatial-tree-root-node))
 
+(defn unrolled-tree [node]
+  (->> (dissoc node :children)
+       (into [])
+       (cons [:children (some->> (:children node)
+                                 (apply ct/vector))])
+       (filter (comp some? second))
+       (apply concat)
+       (apply ct/hash-map)))
+
 (defrecord Surfaces [threadpool normalized-trees-forest epsil iteration-limit sample-size center radius material]
   BuildableProto
   (build [_]
-    (->> normalized-trees-forest
-         (mapv (fn [[control-points spatial-tree-root-node]]
-                 [(->> control-points
-                       (mapv (fn [value] (-> value
-                                             (v/mult radius)
-                                             (v/add center)))))
-                  (->> spatial-tree-root-node
-                       (scale-radius radius)
-                       (scale-center center radius)
-                       (bezier-spline/add-spheres))]))
-         (cp/pmap threadpool (fn [[control-points tree-node]]
-                               (bezier-spline/->Surface tree-node
-                                                        control-points
-                                                        epsil iteration-limit sample-size material))))))
+    (cp/pmap threadpool
+             (fn [[control-points spatial-tree-root-node]]
+               (bezier-spline/->Surface (->> spatial-tree-root-node
+                                             (into {})
+                                             (scale-radius radius)
+                                             (scale-center center radius)
+                                             (bezier-spline/add-spheres)
+                                             (unrolled-tree))
+                                        (mapv (fn [value] (-> value
+                                                              (v/mult radius)
+                                                              (v/add center)))
+                                              control-points)
+                                        epsil iteration-limit sample-size material))
+             normalized-trees-forest)))
 
 (defrecord Body [bounding-sphere surfaces]
   HitableProto

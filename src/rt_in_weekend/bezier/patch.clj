@@ -6,11 +6,13 @@
             [fastmath.vector :as vec]
             [fastmath.core :as m]
             [fastmath.vector :as v]
+            [clj-tuple :as ct]
             [clojure.core.memoize :as memo]
             [com.rpl.specter :as specter]
             [rt-in-weekend.util :as ut])
   (:import [rt_in_weekend.ray Ray]
-           (fastmath.vector Vec3)))
+           (fastmath.vector Vec3 Vec2)
+           (fastmath.protocols VectorProto)))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -77,9 +79,6 @@
 
 ;;;
 
-(defn set-field [node k v]
-  (assoc! node k v))
-
 (defn get-field [node k]
   (get node k))
 
@@ -91,7 +90,7 @@
   (specter/recursive-path [] p
     (specter/cond-path (fn [item]
                          (and (vector? item)
-                              (not (instance? Vec3 item)))) [specter/ALL p]
+                              (not (instance? VectorProto item)))) [specter/ALL p]
                        map? (specter/continue-then-stay specter/MAP-VALS p))))
 
 (defn transform-node [field func node]
@@ -110,8 +109,7 @@
   (let [node (persistent! n)]
     {:center     (:center node)
      :radius     (:radius node)
-     :u          (:u node)
-     :v          (:v node)
+     :uv         (:uv node)
      :last-level (:last-level node)
      :children   (some->> (:children node)
                           (mapv as-map))}))
@@ -121,8 +119,8 @@
 
 ;;;
 
-(def Tu [0.0 0.5 0.0 0.5])
-(def Tv [0.0 0.0 0.5 0.5])
+(def Tu (ct/vector 0.0 0.5 0.0 0.5))
+(def Tv (ct/vector 0.0 0.0 0.5 0.5))
 
 (defn reverse-div ^double [^double a ^double b]
   (/ b a))
@@ -148,21 +146,21 @@
   (let [[^double u ^double v _] (reduce (partial eval-uv-by-path path)
                                         (v/vec3 0.0 0.0 1.0)
                                         (-> ^long levels-number dec range))
-        four-points [(bezier-s control-points u v)
-                     (bezier-s control-points (+ u ^double part-size) v)
-                     (bezier-s control-points u (+ v ^double part-size))
-                     (bezier-s control-points (+ u ^double part-size) (+ v ^double part-size))]
+        four-points (ct/vector (bezier-s control-points u v)
+                               (bezier-s control-points (+ u ^double part-size) v)
+                               (bezier-s control-points u (+ v ^double part-size))
+                               (bezier-s control-points (+ u ^double part-size) (+ v ^double part-size)))
         Center (->> four-points
                     (reduce v/add)
                     (ut/flip v/div 4))
         R (->> four-points
                (map (partial v/dist Center))
                (reduce m/fast-max))]
-    (set-field node :u u)
-    (set-field node :v v)
-    (set-field node :last-level true)
-    (set-field node :center Center)
-    (set-field node :radius R)))
+    (assoc! node
+            :uv (v/vec2 u v)
+            :last-level true
+            :center Center
+            :radius R)))
 
 (defn four-spheres-into-one-sphere [node]
   (let [children (:children node)
@@ -178,35 +176,25 @@
                (map (comp (partial v/dist Center)
                           (get-field-fn :center)))
                (reduce m/fast-max))]
-    (set-field node :last-level false)
-    (set-field node :center Center)
-    (set-field node :radius (+ ^double R ^double r))))
+    (assoc! node
+            :last-level false
+            :center Center
+            :radius (+ ^double R ^double r))))
 
 ;;;
-
-(defn transient-children [node]
-  (->> (transient [])
-       (set-field node :children)))
-
-(defn persistent-children [{:keys [children] :as node}]
-  (->> (persistent! children)
-       (set-field node :children)))
-
-(defn add-child [{:keys [children]} child]
-  (conj! children child))
 
 (defn build-tree [control-points levels-number part-size level path node]
   (if (= level (dec ^long levels-number))
     (four-points-into-one-sphere control-points levels-number part-size path node)
-    (do
-      (transient-children node)
-      (doseq [i (range 4)]
-        (let [child (new-node)]
-          (add-child node child)
-          (build-tree control-points levels-number part-size
-                      (inc ^long level) (conj path i) child)))
-      (persistent-children node)
-      (four-spheres-into-one-sphere node))))
+    (->> (range 4)
+         (map (fn [i]
+                (let [child (new-node)]
+                  (build-tree control-points levels-number part-size
+                              (inc ^long level) (conj path i) child)
+                  child)))
+         (apply ct/vector)
+         (assoc! node :children)
+         (four-spheres-into-one-sphere))))
 
 (defrecord BezierSpatialTree [^long levels-number control-points]
   BuildableProto
@@ -282,10 +270,12 @@
                          (hit sphere ray t-min t-max))))
              (shuffle)
              (take sample-size)
-             (map (fn [{:keys [u v]}]
-                    (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max iteration-limit material)
-                            (v/vec3 u v t-min)
-                            (range iteration-limit))))
+             (map (fn [{:keys [uv]}]
+                    (let [u (.x ^Vec2 uv)
+                          v (.y ^Vec2 uv)]
+                      (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max iteration-limit material)
+                              (v/vec3 u v t-min)
+                              (range iteration-limit)))))
              (filter some?)
              (seq)
              (min-hit))))

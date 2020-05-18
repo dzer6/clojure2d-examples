@@ -5,7 +5,7 @@
             [fastmath.core :as m]
             [com.climate.claypoole :as cp]
             [rt-in-weekend.bezier.patch-file-format :as bpt]
-            [rt-in-weekend.util :as ut])
+            [clj-tuple :as ct])
   (:import (fastmath.vector Vec3)))
 
 (set! *warn-on-reflection* true)
@@ -25,7 +25,7 @@
         tree (->> normalized-control-points
                   (bezier-spline/->BezierSpatialTree tree-levels-number)
                   (build))]
-    [normalized-control-points tree]))
+    (ct/vector normalized-control-points tree)))
 
 (defn object-normalized-spatial-trees [control-points-vec threadpool tree-levels-number]
   (let [center (->> control-points-vec
