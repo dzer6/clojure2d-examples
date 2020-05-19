@@ -38,7 +38,7 @@
     :else (->Dielectric (r/drand 1 2))))
 
 (defn random-scene [threadpool]
-  (let [epsil 0.00001
+  (let [epsil 0.001
         iteration-limit 300
         sample-size 5
         tree-levels-number 5
@@ -93,7 +93,7 @@
 
 (def ^:const ^int nx 800)
 (def ^:const ^int ny 400)
-(def ^:const ^int samples 1)
+(def ^:const ^int samples 200)
 
 (def img (p/pixels nx ny))
 
