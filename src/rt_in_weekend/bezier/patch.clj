@@ -88,10 +88,10 @@
 
 (def MAP-VECTOR-NODES
   (specter/recursive-path [] p
-    (specter/cond-path (fn [item]
-                         (and (vector? item)
-                              (not (instance? VectorProto item)))) [specter/ALL p]
-                       map? (specter/continue-then-stay specter/MAP-VALS p))))
+                          (specter/cond-path (fn [item]
+                                               (and (vector? item)
+                                                    (not (instance? VectorProto item)))) [specter/ALL p]
+                                             map? (specter/continue-then-stay specter/MAP-VALS p))))
 
 (defn transform-node [field func node]
   (specter/transform [MAP-VECTOR-NODES (specter/must field)]
@@ -229,7 +229,7 @@
                                 ^Vec3 ray
                                 t-min
                                 t-max
-                                iteration-limit
+                                iteration-limits
                                 material
                                 ^Vec3 uvt
                                 i]
@@ -243,7 +243,7 @@
         ^Vec3 f-v (bezier-sv control-points u v)
         ^Vec3 ray-sub-dir (vec/sub (.direction ^Ray ray))
         dn (- (determ f-u f-v ray-sub-dir))]
-    (if (or (= i (dec ^long iteration-limit))
+    (if (or (= i (dec ^long iteration-limits))
             (within-the-margin-of-error f epsil))
       (-> (when (boundary-conditions-are-met u v t t-min t-max)
             (->HitData t patp (-> (vec/cross f-u f-v) (vec/normalize)) material))
@@ -254,30 +254,56 @@
 
 ;;;
 
-(defrecord Surface [spatial-tree-root-node control-points epsil iteration-limit sample-size material]
+(defn last-level-intersected-spheres [spatial-tree-root-node ray t-min t-max]
+  (some->> spatial-tree-root-node
+           (tree-seq (fn [{:keys [last-level sphere]}]
+                       (and (not last-level)
+                            (some?
+                              (hit sphere ray t-min t-max))))
+                     :children)
+           (seq)                                            ; short circuit that works with some->>
+           (filter :last-level)
+           (filter (fn [{:keys [sphere]}]
+                     (some?
+                       (hit sphere ray t-min t-max))))))
+
+(defn get-iteration-limit [last-level-spheres iteration-limits-sample-sizes]
+  (if (seq last-level-spheres)
+    (reduce (fn [^long value [[^long from ^long to] [^long iteration-limit _]]]
+              (if (<= from value to)
+                (reduced iteration-limit)
+                value))
+            (-> last-level-spheres count long)
+            iteration-limits-sample-sizes)
+    0))
+
+(defn get-sample-size [last-level-spheres iteration-limits-sample-sizes]
+  (if (seq last-level-spheres)
+    (reduce (fn [^long value [[^long from ^long to] [_ ^long sample-size]]]
+              (if (<= from value to)
+                (reduced sample-size)
+                value))
+            (-> last-level-spheres count long)
+            iteration-limits-sample-sizes)
+    0))
+
+(defrecord Surface [spatial-tree-root-node control-points epsil iteration-limits-sample-sizes material]
   HitableProto
   (hit [_ ray t-min t-max]
-    (some->> spatial-tree-root-node
-             (tree-seq (fn [{:keys [last-level sphere]}]
-                         (and (not last-level)
-                              (some?
-                                (hit sphere ray t-min t-max))))
-                       :children)
-             (seq)                                          ; short circuit that works with some->>
-             (filter :last-level)
-             (filter (fn [{:keys [sphere]}]
-                       (some?
-                         (hit sphere ray t-min t-max))))
-             (shuffle)
-             (take sample-size)
-             (map (fn [{:keys [uv]}]
-                    (let [u (.x ^Vec2 uv)
-                          v (.y ^Vec2 uv)]
-                      (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max iteration-limit material)
-                              (v/vec3 u v t-min)
-                              (range iteration-limit)))))
-             (filter some?)
-             (seq)
-             (min-hit))))
+    (let [last-level-spheres (last-level-intersected-spheres spatial-tree-root-node ray t-min t-max)
+          iteration-limit (get-iteration-limit last-level-spheres iteration-limits-sample-sizes)
+          sample-size (get-sample-size last-level-spheres iteration-limits-sample-sizes)]
+      (some->> last-level-spheres
+               (shuffle)
+               (take sample-size)
+               (map (fn [{:keys [uv]}]
+                      (let [u (.x ^Vec2 uv)
+                            v (.y ^Vec2 uv)]
+                        (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max iteration-limit material)
+                                (v/vec3 u v t-min)
+                                (range iteration-limit)))))
+               (filter some?)
+               (seq)
+               (min-hit)))))
 
 ;;;

@@ -7,7 +7,7 @@
 
 (defn min-hit [hits]
   (reduce (fn [^HitData a ^HitData b]
-            (if (< (.t a) (.t a))
+            (if (< (.t a) (.t b))
               a
               b))
           hits))

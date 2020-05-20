@@ -37,7 +37,7 @@
        (apply concat)
        (apply ct/hash-map)))
 
-(defrecord Surfaces [threadpool normalized-trees-forest epsil iteration-limit sample-size center radius material]
+(defrecord Surfaces [threadpool normalized-trees-forest epsil iteration-limits-sample-sizes center radius material]
   BuildableProto
   (build [_]
     (cp/pmap threadpool
@@ -52,7 +52,7 @@
                                                               (v/mult radius)
                                                               (v/add center)))
                                               control-points)
-                                        epsil iteration-limit sample-size material))
+                                        epsil iteration-limits-sample-sizes material))
              normalized-trees-forest)))
 
 (defrecord Body [bounding-sphere surfaces]
@@ -68,8 +68,8 @@
 
 ;;;
 
-(defn create [threadpool normalized-trees-forest epsil iteration-limit sample-size center radius material]
-  (let [surfaces (-> (->Surfaces threadpool normalized-trees-forest epsil iteration-limit sample-size center radius material)
+(defn create [threadpool normalized-trees-forest epsil iteration-limits-sample-sizes center radius material]
+  (let [surfaces (-> (->Surfaces threadpool normalized-trees-forest epsil iteration-limits-sample-sizes center radius material)
                      (build))
         Center (->> surfaces
                     (map (comp :center :spatial-tree-root-node))

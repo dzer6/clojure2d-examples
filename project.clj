@@ -5,18 +5,22 @@
             :url  "http://unlicense.org"}
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/core.memoize "1.0.236"]
+
+                 [org.clojure/tools.logging "1.0.0"]
+                 [ch.qos.logback/logback-classic "1.2.3"]
+                 [ch.qos.logback.contrib/logback-json-classic "0.1.5"]
+                 [ch.qos.logback.contrib/logback-jackson "0.1.5"]
+                 [org.slf4j/slf4j-api "1.7.30"]
+                 [org.slf4j/jul-to-slf4j "1.7.30"]          ; JUL to SLF4J
+                 [org.slf4j/jcl-over-slf4j "1.7.30"]        ; JCL to SLF4J
+                 [org.slf4j/log4j-over-slf4j "1.7.30"]      ; Log4j to SLF4J
+
                  [com.climate/claypoole "1.1.4"]
                  [clj-tuple "0.2.2"]
                  [com.rpl/specter "1.1.3"]
-                 [uncomplicate/neanderthal "0.31.0"]
                  [criterium "0.4.5"]
-                 [prismatic/hiphip "0.2.1"]
                  [net.mikera/core.matrix "0.62.0"]
                  [net.mikera/vectorz-clj "0.48.0"]
-                 [clatrix/clatrix "0.5.0"]
-                 [org.nd4j/nd4j-native-platform "1.0.0-beta"]
-                 [org.nd4j/nd4j-api "1.0.0-beta"]
-                 [net.littleredcomputer/sicmutils "0.12.0"]
                  [generateme/fastmath "1.5.2"]
                  [clojure2d "1.3.1"]]
 

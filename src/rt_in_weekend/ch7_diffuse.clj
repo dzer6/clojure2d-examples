@@ -11,7 +11,9 @@
             [fastmath.random :as r]
             [rt-in-weekend.bezier.complex-object :as bezier-complex-object]
             [rt-in-weekend.bezier.normalized-trees-forest :as normalized-trees-forest]
-            [com.climate.claypoole :as cp])
+            [com.climate.claypoole :as cp]
+            [clj-tuple :as ct]
+            [rt-in-weekend.util :as ut])
   (:import [fastmath.vector Vec3]
            [rt_in_weekend.ray Ray]
            [rt_in_weekend.hitable HitData]))
@@ -24,13 +26,23 @@
 (def ^:const v2 (v/vec3 0.5 0.7 1.0))
 
 (defn create-world [threadpool]
-  (let [utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
-                                (normalized-trees-forest/create threadpool 8))]
+  (let [epsil 0.001
+        iteration-limits-sample-sizes (ct/hash-map (ct/vector 1 4) (ct/vector 100 1)
+                                                   (ct/vector 5 30) (ct/vector 1000 3)
+                                                   (ct/vector 31 90) (ct/vector 5000 10)
+                                                   (ct/vector 91 150) (ct/vector 10000 15)
+                                                   (ct/vector 151 300) (ct/vector 30000 20)
+                                                   (ct/vector 301 1000000) (ct/vector 50000 25))
+        tree-levels-number 8
+        rotate-teapot (comp (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/QUARTER_PI)
+                            (partial ut/flip v/axis-rotate (v/vec3 -1 0 0) m/HALF_PI))
+        utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
+                                (normalized-trees-forest/create threadpool tree-levels-number rotate-teapot))
+        the-teapot (partial bezier-complex-object/create threadpool utah-teapot-forest
+                            epsil iteration-limits-sample-sizes)]
     [(->Sphere (v/vec3 0.0 -100.5 -1.0) 100.0 nil)
      #_(->Sphere (v/vec3 0.0 0.0 -1.0) 0.5 nil)
-     (bezier-complex-object/create threadpool utah-teapot-forest
-                                   0.000001 10000 5
-                                   (v/vec3 0.0 0.0 -1.0) 0.5 nil)]))
+     (the-teapot (v/vec3 0.0 0.0 -1.0) 0.7 nil)]))
 
 (defn random-in-unit-sphere []
   (let [v (v/vec3 (r/drand -1.0 1.0) (r/drand -1.0 1.0) (r/drand -1.0 1.0))]
