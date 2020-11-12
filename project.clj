@@ -24,18 +24,10 @@
                  [generateme/fastmath "1.5.2"]
                  [clojure2d "1.3.1"]]
 
+  :source-paths ["src/main/clojure"]
+  :resource-paths ["src/main/resources"]
+
   :plugins [[lein-ancient "0.6.15"]]
 
   :repl-options {:timeout 120000}
-  :target-path "target/%s"
-
-  #_:aot #_[rt-in-weekend.bezier.patch
-        rt-in-weekend.bezier.normalized-trees-forest
-        rt-in-weekend.bezier.complex-object]
-
-  :jvm-opts ^:replace ["-server"
-                       "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
-                       "-Dclojure.compiler.direct-linking=true"
-                       "-Djava.library.path=$LD_LIBRARY_PATH"
-                       "-Dorg.bytedeco.javacpp.openblas.load=mkl_rt"]
-  )
+  :target-path "target/%s")
