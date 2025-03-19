@@ -22,8 +22,8 @@
 (set! *unchecked-math* :warn-on-boxed)
 (m/use-primitive-operators)
 
-(def ^:const v1 (v/vec3 1.0 1.0 1.0))
-(def ^:const v2 (v/vec3 0.5 0.7 1.0))
+(def v1 (v/vec3 1.0 1.0 1.0))
+(def v2 (v/vec3 0.5 0.7 1.0))
 
 (def zero (v/vec3 0.0 0.0 0.0))
 
@@ -38,46 +38,43 @@
     :else (->Dielectric (r/drand 1 2))))
 
 (defn random-scene [threadpool]
-  (let [epsil 0.001
+  (let [epsil                         0.001
         iteration-limits-sample-sizes (ct/hash-map (ct/vector 1 4) (ct/vector 100 1)
                                                    (ct/vector 5 30) (ct/vector 1000 3)
                                                    (ct/vector 31 90) (ct/vector 5000 10)
                                                    (ct/vector 91 150) (ct/vector 10000 15)
                                                    (ct/vector 151 300) (ct/vector 30000 20)
                                                    (ct/vector 301 1000000) (ct/vector 50000 25))
-        tree-levels-number 7
-        rotate-teapot (comp (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/QUARTER_PI)
-                            (partial ut/flip v/axis-rotate (v/vec3 -1 0 0) m/HALF_PI))
-        utah-teapot-forest (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
-                                (normalized-trees-forest/create threadpool tree-levels-number rotate-teapot))
-        rotate-teacup (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/HALF_PI)
-        teacup-forest (->> "http://www.holmes3d.net/graphics/teapot/teacup.bpt"
-                           (normalized-trees-forest/create threadpool tree-levels-number rotate-teacup))
-        the-teapot (partial bezier-complex-object/create threadpool utah-teapot-forest
-                            epsil iteration-limits-sample-sizes)
-        teacup (partial bezier-complex-object/create threadpool teacup-forest
-                        epsil iteration-limits-sample-sizes)
-        world [(->Sphere (v/vec3 0 -1000 0) 1000 (->Lambertian (v/vec3 0.5 0.5 0.5)))
-
-               (the-teapot (v/vec3 -4 1 0.5) 1.9 (->Lambertian (v/vec3 0.4 0.2 0.1)))
-
-               (the-teapot (v/vec3 0 1 0) 1.9 (->Dielectric 1.5))
-
-               (the-teapot (v/vec3 4 1 -0.5) 1.9 (->Metal (v/vec3 0.7 0.6 0.5) 0.0))]
-        teacups (cp/pfor threadpool [^int a (range -11 11 2)
-                                     ^int b (range -11 11 2)
-                                     :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
-                                           choose-mat (r/drand)]
-                                     :when (> (v/mag (v/sub center (v/vec3 4 0.2 0))) 0.9)]
-                         (->> (rand-material choose-mat)
-                              (teacup center 0.4)))
-        small-spheres (cp/pfor threadpool [^int a (range -11 11 3)
-                                           ^int b (range -11 11 3)
-                                           :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
-                                                 choose-mat (r/drand)]
-                                           :when (> (v/mag (v/sub center (v/vec3 4 0.2 0))) 0.9)]
-                               (->> (rand-material choose-mat)
-                                    (->Sphere center 0.2)))]
+        tree-levels-number            7
+        rotate-teapot                 (comp (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/QUARTER_PI)
+                                            (partial ut/flip v/axis-rotate (v/vec3 -1 0 0) m/HALF_PI))
+        utah-teapot-forest            (->> "http://www.holmes3d.net/graphics/teapot/teapotrim.bpt"
+                                           (normalized-trees-forest/create threadpool tree-levels-number rotate-teapot))
+        rotate-teacup                 (partial ut/flip v/axis-rotate (v/vec3 0 1 0) m/HALF_PI)
+        teacup-forest                 (->> "http://www.holmes3d.net/graphics/teapot/teacup.bpt"
+                                           (normalized-trees-forest/create threadpool tree-levels-number rotate-teacup))
+        the-teapot                    (partial bezier-complex-object/create threadpool utah-teapot-forest
+                                               epsil iteration-limits-sample-sizes)
+        teacup                        (partial bezier-complex-object/create threadpool teacup-forest
+                                               epsil iteration-limits-sample-sizes)
+        world                         [(->Sphere (v/vec3 0 -1000 0) 1000 (->Lambertian (v/vec3 0.5 0.5 0.5)))
+                                       (the-teapot (v/vec3 -4 1 0.5) 1.9 (->Lambertian (v/vec3 0.4 0.2 0.1)))
+                                       (the-teapot (v/vec3 0 1 0) 1.9 (->Dielectric 1.5))
+                                       (the-teapot (v/vec3 4 1 -0.5) 1.9 (->Metal (v/vec3 0.7 0.6 0.5) 0.0))]
+        teacups                       (cp/pfor threadpool [^int a (range -11 11 2)
+                                                           ^int b (range -11 11 2)
+                                                           :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
+                                                                 choose-mat (r/drand)]
+                                                           :when (> (v/mag (v/sub center (v/vec3 4 0.2 0))) 0.9)]
+                                               (->> (rand-material choose-mat)
+                                                    (teacup center 0.4)))
+        small-spheres                 (cp/pfor threadpool [^int a (range -11 11 3)
+                                                           ^int b (range -11 11 3)
+                                                           :let [center (v/vec3 (+ a (r/drand 0.9)) 0.2 (+ b (r/drand 0.9)))
+                                                                 choose-mat (r/drand)]
+                                                           :when (> (v/mag (v/sub center (v/vec3 4 0.2 0))) 0.9)]
+                                               (->> (rand-material choose-mat)
+                                                    (->Sphere center 0.2)))]
     (->> (concat world
                  teacups
                  small-spheres)
@@ -92,18 +89,18 @@
          (v/emult attenuation (color scattered world (dec depth)))
          zero))
      (let [^Vec3 unit (v/normalize (.direction ray))
-           t (* 0.5 (inc (.y unit)))]
+           t          (* 0.5 (inc (.y unit)))]
        (v/interpolate v1 v2 t)))))
 
-(def ^:const ^int nx 800)
-(def ^:const ^int ny 400)
-(def ^:const ^int samples 200)
+(def nx 1000)
+(def ny 500)
+(def samples 200)
 
 (def img (p/pixels nx ny))
 
 (def camera
   (let [lookfrom (v/vec3 13 2 4)
-        lookat (v/vec3 0 0 0)]
+        lookat   (v/vec3 0 0 0)]
     (positionable-camera lookfrom lookat (v/vec3 0 1 0) 20 (/ (double nx) ny) 0.1 20.0)))
 
 (def r2-seq (vec (take samples (r/jittered-sequence-generator :r2 2 0.5))))
@@ -127,12 +124,12 @@
              (shuffle)
              (cp/pmap threadpool
                       (fn [[i j]]
-                        (let [p (v/vec2 i j)
+                        (let [p   (v/vec2 i j)
                               col (reduce v/add zero
                                           (map #(let [^Vec2 pp (v/add % p)
-                                                      u (/ (.x pp) nx)
-                                                      v (/ (.y pp) ny)
-                                                      r (get-ray camera u v)]
+                                                      u        (/ (.x pp) nx)
+                                                      v        (/ (.y pp) ny)
+                                                      r        (get-ray camera u v)]
                                                   (color r world)) r2-seq))]
                           (p/set-color! img i (- (dec ny) j) (-> (v/div col samples)
                                                                  (v/sqrt)

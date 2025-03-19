@@ -22,9 +22,9 @@
                                           (-> (v/sub control-point center)
                                               (v/div radius)))
                                         control-points)
-        tree (->> normalized-control-points
-                  (bezier-spline/->BezierSpatialTree tree-levels-number)
-                  (build))]
+        tree                      (->> normalized-control-points
+                                       (bezier-spline/->BezierSpatialTree tree-levels-number)
+                                       (build))]
     (ct/vector normalized-control-points tree)))
 
 (defn object-normalized-spatial-trees [control-points-vec threadpool tree-levels-number]

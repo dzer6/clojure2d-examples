@@ -18,10 +18,10 @@
   (get-ray [_ u v] (->Ray origin (p/add (p/add (p/mult horizontal u) (p/mult vertical v))
                                         lower-left-corner))))
 
-(def ^:const lower-left-corner (v/vec3 -2.0 -1.0 -1.0))
-(def ^:const horizontal (v/vec3 4.0 0.0 0.0))
-(def ^:const vertical (v/vec3 0.0 2.0 0.0))
-(def ^:const origin (v/vec3 0.0 0.0 0.0))
+(def lower-left-corner (v/vec3 -2.0 -1.0 -1.0))
+(def horizontal (v/vec3 4.0 0.0 0.0))
+(def vertical (v/vec3 0.0 2.0 0.0))
+(def origin (v/vec3 0.0 0.0 0.0))
 
 (def default-camera
   (->FirstCamera origin lower-left-corner horizontal vertical))

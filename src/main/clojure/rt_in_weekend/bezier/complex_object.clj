@@ -69,20 +69,20 @@
 ;;;
 
 (defn create [threadpool normalized-trees-forest epsil iteration-limits-sample-sizes center radius material]
-  (let [surfaces (-> (->Surfaces threadpool normalized-trees-forest epsil iteration-limits-sample-sizes center radius material)
-                     (build))
-        Center (->> surfaces
-                    (map (comp :center :spatial-tree-root-node))
-                    (reduce v/add)
-                    (ut/flip v/div (count surfaces)))
-        R (->> surfaces
-               (sort-by (comp :radius :spatial-tree-root-node))
-               (last)
-               :spatial-tree-root-node
-               :radius)
-        r (->> surfaces
-               (map (comp (partial v/dist Center)
-                          (comp :center :spatial-tree-root-node)))
-               (reduce m/fast-max))
+  (let [surfaces        (-> (->Surfaces threadpool normalized-trees-forest epsil iteration-limits-sample-sizes center radius material)
+                            (build))
+        Center          (->> surfaces
+                             (map (comp :center :spatial-tree-root-node))
+                             (reduce v/add)
+                             (ut/flip v/div (count surfaces)))
+        R               (->> surfaces
+                             (sort-by (comp :radius :spatial-tree-root-node))
+                             (last)
+                             :spatial-tree-root-node
+                             :radius)
+        r               (->> surfaces
+                             (map (comp (partial v/dist Center)
+                                        (comp :center :spatial-tree-root-node)))
+                             (reduce m/fast-max))
         bounding-sphere (->Sphere Center (+ ^double R ^double r) nil)]
     (->Body bounding-sphere surfaces)))

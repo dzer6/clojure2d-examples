@@ -20,3 +20,6 @@ logs
 .eastwood
 .bash_history
 build.xml
+.clj-kondo
+.lsp
+.calva

@@ -9,11 +9,10 @@
             [clj-tuple :as ct]
             [clojure.core.memoize :as memo]
             [com.rpl.specter :as specter]
-            [rt-in-weekend.util :as ut]
-            [clojure.tools.logging :as log])
-  (:import [rt_in_weekend.ray Ray]
-           (fastmath.vector Vec3 Vec2)
-           (fastmath.protocols VectorProto)))
+            [rt-in-weekend.util :as ut])
+  (:import (fastmath.vector Vec3 Vec2)
+           (fastmath.protocols VectorProto)
+           (rt_in_weekend.ray Ray)))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -25,16 +24,16 @@
   (let [s (- 1.0 t)]
     (condp = i
       0 (* s s s)
-      1 (* 3 t s s)
-      2 (* 3 t t s)
+      1 (* 3.0 t s s)
+      2 (* 3.0 t t s)
       3 (* t t t))))
 
 (defn Bp [^long i ^double t]
   (condp = i
-    0 (* -3 (- 1.0 t) (- 1.0 t))
-    1 (* 3 (- 1.0 (* t (- 4.0 (* 3 t)))))
+    0 (* -3.0 (- 1.0 t) (- 1.0 t))
+    1 (* 3.0 (- 1.0 (* t (- 4.0 (* 3.0 t)))))
     2 (* t (- 6.0 (* 9.0 t)))
-    3 (* 3 t t)))
+    3 (* 3.0 t t)))
 
 (def memo-control-point (memoize (fn [control-points ^long i ^long j]
                                    (nth control-points (+ (* i 4) j)))))
@@ -89,10 +88,10 @@
 
 (def MAP-VECTOR-NODES
   (specter/recursive-path [] p
-                          (specter/cond-path (fn [item]
-                                               (and (vector? item)
-                                                    (not (instance? VectorProto item)))) [specter/ALL p]
-                                             map? (specter/continue-then-stay specter/MAP-VALS p))))
+    (specter/cond-path (fn [item]
+                         (and (vector? item)
+                              (not (instance? VectorProto item)))) [specter/ALL p]
+                       map? (specter/continue-then-stay specter/MAP-VALS p))))
 
 (defn transform-node [field func node]
   (specter/transform [MAP-VECTOR-NODES (specter/must field)]
@@ -136,9 +135,9 @@
 
 (defn eval-uv-by-path [quadruple-tree-path ^Vec3 uvh ^long i]
   (let [flag (get quadruple-tree-path i)
-        u (.x uvh)
-        v (.y uvh)
-        h (.z uvh)]
+        u    (.x uvh)
+        v    (.y uvh)
+        h    (.z uvh)]
     (v/vec3 (memo-eval-param-by-path-flag flag Tu h u)
             (memo-eval-param-by-path-flag flag Tv h v)
             (* 2.0 h))))
@@ -151,12 +150,12 @@
                                (bezier-s control-points (+ u ^double part-size) v)
                                (bezier-s control-points u (+ v ^double part-size))
                                (bezier-s control-points (+ u ^double part-size) (+ v ^double part-size)))
-        Center (->> four-points
-                    (reduce v/add)
-                    (ut/flip v/div 4))
-        R (->> four-points
-               (map (partial v/dist Center))
-               (reduce m/fast-max))]
+        Center      (->> four-points
+                         (reduce v/add)
+                         (ut/flip v/div 4))
+        R           (->> four-points
+                         (map (partial v/dist Center))
+                         (reduce m/fast-max))]
     (assoc! node
             :uv (v/vec2 u v)
             :last-level true
@@ -165,18 +164,18 @@
 
 (defn four-spheres-into-one-sphere [node]
   (let [children (:children node)
-        Center (->> children
-                    (map (get-field-fn :center))
-                    (reduce v/add)
-                    (ut/flip v/div 4))
-        R (->> children
-               (sort-by (get-field-fn :radius))
-               (last)
-               (ut/flip get-field :radius))
-        r (->> children
-               (map (comp (partial v/dist Center)
-                          (get-field-fn :center)))
-               (reduce m/fast-max))]
+        Center   (->> children
+                      (map (get-field-fn :center))
+                      (reduce v/add)
+                      (ut/flip v/div 4))
+        R        (->> children
+                      (sort-by (get-field-fn :radius))
+                      (last)
+                      (ut/flip get-field :radius))
+        r        (->> children
+                      (map (comp (partial v/dist Center)
+                                 (get-field-fn :center)))
+                      (reduce m/fast-max))]
     (assoc! node
             :last-level false
             :center Center
@@ -201,7 +200,7 @@
   BuildableProto
   (build [_]
     (let [part-size (/ 1.0 (* (dec levels-number) (dec levels-number)))
-          root (new-node)]
+          root      (new-node)]
       (build-tree control-points levels-number part-size 0 [] root)
       (as-map root))))
 
@@ -225,7 +224,7 @@
        (<= 0.0 ^double v 1.0)
        (<= ^double t-min ^double t ^double t-max)))
 
-(defn newton–raphson-iteration [control-points
+(defn newton-raphson-iteration [control-points
                                 epsil
                                 ^Ray ray
                                 t-min
@@ -234,16 +233,16 @@
                                 material
                                 ^Vec3 uvt
                                 i]
-  (let [u (.x uvt)
-        v (.y uvt)
-        t (.z uvt)
-        ^Vec3 patp (point-at-parameter ^Ray ray t)
-        ^Vec3 f (-> (bezier-s control-points u v)
-                    (vec/sub patp))
-        ^Vec3 f-u (bezier-su control-points u v)
-        ^Vec3 f-v (bezier-sv control-points u v)
+  (let [u                 (.x uvt)
+        v                 (.y uvt)
+        t                 (.z uvt)
+        ^Vec3 patp        (point-at-parameter ^Ray ray t)
+        ^Vec3 f           (-> (bezier-s control-points u v)
+                              (vec/sub patp))
+        ^Vec3 f-u         (bezier-su control-points u v)
+        ^Vec3 f-v         (bezier-sv control-points u v)
         ^Vec3 ray-sub-dir (vec/sub (.direction ^Ray ray))
-        dn (- (determ f-u f-v ray-sub-dir))]
+        dn                (- (determ f-u f-v ray-sub-dir))]
     (if (or (= i (dec ^long iteration-limits))
             (within-the-margin-of-error f epsil))
       (-> (when (boundary-conditions-are-met u v t t-min t-max)
@@ -257,16 +256,10 @@
 
 (defn last-level-intersected-spheres [spatial-tree-root-node ray t-min t-max]
   (some->> spatial-tree-root-node
-           (tree-seq (fn [{:keys [last-level sphere]}]
-                       (and (not last-level)
-                            (some?
-                              (hit sphere ray t-min t-max))))
+           (tree-seq (comp (partial ut/flip hit t-max t-min ray)
+                           :sphere)
                      :children)
-           (seq)                                            ; short circuit that works with some->>
-           (filter :last-level)
-           (filter (fn [{:keys [sphere]}]
-                     (some?
-                       (hit sphere ray t-min t-max))))))
+           (filter :last-level)))
 
 (defn get-iteration-limit [last-level-spheres iteration-limits-sample-sizes]
   (if (seq last-level-spheres)
@@ -292,19 +285,17 @@
   HitableProto
   (hit [_ ray t-min t-max]
     (let [last-level-spheres (last-level-intersected-spheres spatial-tree-root-node ray t-min t-max)
-          iteration-limit (get-iteration-limit last-level-spheres iteration-limits-sample-sizes)
-          sample-size (get-sample-size last-level-spheres iteration-limits-sample-sizes)]
+          iteration-limit    (get-iteration-limit last-level-spheres iteration-limits-sample-sizes)
+          sample-size        (get-sample-size last-level-spheres iteration-limits-sample-sizes)]
       (some->> last-level-spheres
                (shuffle)
                (take sample-size)
                (map (fn [{:keys [uv]}]
                       (let [u (.x ^Vec2 uv)
                             v (.y ^Vec2 uv)]
-                        (reduce (partial newton–raphson-iteration control-points epsil ray t-min t-max iteration-limit material)
+                        (reduce (partial newton-raphson-iteration control-points epsil ray t-min t-max iteration-limit material)
                                 (v/vec3 u v t-min)
                                 (range iteration-limit)))))
                (filter some?)
                (seq)
                (min-hit)))))
-
-;;;

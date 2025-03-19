@@ -20,7 +20,7 @@
 
 (deftype Lambertian [albedo]
   MaterialProto
-  (scatter [_ ray-in hit-data]
+  (scatter [_ _ hit-data]
     (let [target (v/add (.p ^HitData hit-data) (v/add (.normal ^HitData hit-data) (random-in-unit-sphere)))]
       [albedo (->Ray (.p ^HitData hit-data) (v/sub target (.p ^HitData hit-data)))])))
 
@@ -38,8 +38,8 @@
         [albedo scattered]))))
 
 (defn- refract [v n ^double ni-over-nt]
-  (let [uv (v/normalize v)
-        dt (v/dot uv n)
+  (let [uv           (v/normalize v)
+        dt           (v/dot uv n)
         discriminant (- 1.0 (* ni-over-nt ni-over-nt (- 1.0 (* dt dt))))]
     (when (pos? discriminant)
       (v/sub (v/mult (v/sub uv (v/mult n dt)) ni-over-nt)
@@ -49,12 +49,12 @@
   (let [r0 (m/sq (/ (- 1.0 ref-idx) (inc ref-idx)))]
     (+ r0 (* (- 1.0 r0) (m/pow (- 1.0 cosine) 5.0)))))
 
-(def ^:private ^:const one (v/vec3 1.0 1.0 1.0))
+(def one (v/vec3 1.0 1.0 1.0))
 
 (defrecord Dielectric [^double ref-idx]
   MaterialProto
   (scatter [_ ray-in hit-data]
-    (let [dot (v/dot (.direction ^Ray ray-in) (.normal ^HitData hit-data))
+    (let [dot       (v/dot (.direction ^Ray ray-in) (.normal ^HitData hit-data))
           [outward-normal ni-over-nt cosine] (if (pos? dot)
                                                [(v/sub (.normal ^HitData hit-data))
                                                 ref-idx
